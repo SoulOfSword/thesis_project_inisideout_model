@@ -9,3 +9,4 @@ __pycache__/
 .env
 config_local.yaml
 secrets.yaml
+.~lock.baryons.csv#
