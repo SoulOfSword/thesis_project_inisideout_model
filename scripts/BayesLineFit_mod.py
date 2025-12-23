@@ -345,7 +345,7 @@ WARNING: OBSERVED VERTICAL SCATTER IS SMALLER THAN EXPECTED FROM Y-ERRORS. YOUR 
         fig = plt.figure(figsize=(4, 4), dpi=300)
         x_vec = np.array([np.min(x), np.max(x)])
         y_vec = a_med*x_vec + b_med
-        y_old_vec = 1.4*x_vec + np.log10(0.1625)
+        y_old_vec = 1.54*x_vec - 1.175  # K&dlR+21
         plt.errorbar(x, y, xerr=err_x, yerr=err_y, fmt = ' ', ecolor = 'grey', capsize = 3, alpha=0.3, zorder=0)
         plt.scatter(x, y, color="magenta", edgecolor='k', linewidth=1, s=15, zorder=1)
         if plot_title == "boissier":
@@ -355,7 +355,7 @@ WARNING: OBSERVED VERTICAL SCATTER IS SMALLER THAN EXPECTED FROM Y-ERRORS. YOUR 
             plt.ylabel(r"log$(\Sigma_{SFR}/\Omega)$ $(M_\odot pc^{-2})$")
         if plot_title == "kennicutt":
             plt.plot(x_vec, y_vec, '-r', zorder=3, label=f"Fit: A={10**b_med[0]:.2e}, N={a_med[0]:.2f}")
-            plt.plot(x_vec, y_old_vec, '--o', zorder=3, label=f"Standard KSL (A={0.16}, N={1.40})")
+            plt.plot(x_vec, y_old_vec, '--o', zorder=3, label=f"K&dlR+21 (A={10**(-1.175):.2e}, N={1.54})")
             plt.title(r"Kennicutt-Schmidt SFL")
             plt.xlabel(r"log$(\Sigma_{gas})$ $(M_\odot pc^{-2})$")
             plt.ylabel(r"log$(\Sigma_{SFR})$ $(M_\odot pc^{-2} Gyr^{-1})$")
