@@ -10,6 +10,7 @@ __pycache__/
 config_local.yaml
 secrets.yaml
 .~lock.baryons.csv#
+.DS_Store
 
 #VScode
 .vscode
