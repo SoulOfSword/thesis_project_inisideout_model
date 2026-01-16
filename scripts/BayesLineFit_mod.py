@@ -70,6 +70,7 @@ import time
 #       Harry Desmond, East Knoyle, April 2020: I/O implementations & py-module
 #       Federico Lelli, Cardiff, June 2020: change severe errors with warnings
 #       Harry Desmond, East Knoyle, July 2020: fixed likelihood plot bug
+#       Andrea Costa, Groningen, June 2024: Modified for thesis project
 #-
 #------------------------------------------------------------------------------
 
