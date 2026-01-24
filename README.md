@@ -1,38 +1,86 @@
-# Inside-out Galaxy Evolution Model for Star-Forming Galaxies
+# Galaxy Evolution Models for the Baryonic j-M-f<sub>gas</sub> Relation
 
-This thesis explores the baryonic specific angular momentum–mass–gas fraction $(j_{\mathrm{bar}} - M_{\mathrm{bar}} - f_{\mathrm{gas}})$ relation in star-forming (disk) galaxies and investigates how different star formation laws (including the classical Kennicutt–Schmidt law and a version of the Boissier law) affect it.
+This repository contains a semi-analytical galaxy evolution model developed to investigate the origin of the tight baryonic specific angular momentum–mass–gas fraction (j<sub>bar</sub> − M<sub>bar</sub> − f<sub>gas</sub>) scaling relation discovered by [Mancera Piña et al. (2021)](https://ui.adsabs.harvard.edu/abs/2021A%26A...651L..15M/abstract).
 
-A semi-analytical model is developed that:
-1. **Assumes inside-out growth** — gas accretes at larger radii over time.
-2. **Implements various star formation laws** fitted to observational data, capturing both high-density (inner) and low-density (outer) regions of galactic disks.
-3. **Keeps rotation velocity fixed in time**, to avoid artificially adding angular momentum, while allowing it to vary with radius according to a simple exponential function.
+## Scientific Objectives
 
-**Key results** show that:
-- The *inside-out accretion* assumption is crucial for reproducing the observed $(j_{\mathrm{bar}} - M_{\mathrm{bar}} - f_{\mathrm{gas}})$ relation.
-- Different star formation laws yield noticeable differences in **radial profiles** of gas and stars but do **not** dramatically change the overall $(j_{\mathrm{bar}} - M_{\mathrm{bar}} - f_{\mathrm{gas}})$ relation.
-- Revised laws provide a better match to observed surface densities in galaxy outskirts compared to the classical Kennicutt–Schmidt law.
+The primary goal is to demonstrate that the observed j<sub>bar</sub> − M<sub>bar</sub> − f<sub>gas</sub> relation can emerge naturally from first principles using galaxy evolution models. We compare **two distinct accretion scenarios**:
 
-The thesis can be found [here](https://fse.studenttheses.ub.rug.nl/33339/).
+1. **Inside-out model**: Gas accretes at progressively larger radii over time, with specific angular momentum increasing as j<sub>acc</sub>(t) ∝ t<sup>n</sup>. This reflects the hierarchical assembly of angular momentum in ΛCDM cosmology.
 
----
+2. **Non-inside-out model**: Gas accretes with constant specific angular momentum throughout the galaxy's evolution, and galaxies are naturally born at different (constant) sizes.
 
-**Code Implementation**
+Both models aim to reproduce the empirical relation:
 
-The code in this repository provides a Python-based implementation of the above galaxy evolution model. It numerically solves the relevant differential equations for gas and stellar surface densities under different star formation laws, using a Runge-Kutta approach. It does this through multiprocessing on multiple CPUs. You can configure parameters such as:
-- **Accretion history** (timescale or frequency, total baryonic mass).
-- **Star formation law** (Kennicutt–Schmidt (original or revised) or Boissier).
-- **Rotation curve** (flat or radially varying).
+```
+log(j_bar) = 0.73 log(M_bar) + 0.46 log(f_gas) − 4.25
+```
 
-Results include radial profiles of gas, stars, and star formation rates, as well as global properties like the baryonic mass, gas fraction, and specific angular momentum. These can be compared to observations for validation.
+which exhibits remarkably low intrinsic scatter.
 
-model7.ipynb is the final model variation. All previous models are step-by-step additions in complexity but the results stated in the thesis all come from the final instance. Previous versions are given for reference but may be incorrect.
+## Model Framework
 
----
+### Core Physics
 
-**Data Sources**
+The model tracks the evolution of gas and stellar surface densities through:
 
-- **Star Formation Laws**: We fit the Kennicutt–Schmidt and Boissier laws using the dataset compiled by [Bacchini et al. (2020)](https://ui.adsabs.harvard.edu/abs/2020A%26A...641A..70B/abstract), which includes also low density regions of galaxies. Dwarf galaxy HI data and rotation velocities are taken from [Iorio et al. (2017)](https://ui.adsabs.harvard.edu/abs/2017MNRAS.466.4159I/abstract) (LITTLE THINGS sample; [Hunter et al. (2012)](https://ui.adsabs.harvard.edu/abs/2012AJ....144..134H/abstract)), while star formation rates come from FUV photometry ([Zhang et al. (2012)](https://ui.adsabs.harvard.edu/abs/2012MNRAS.424..665Z/abstract)) calibrated via [McQuinn et al. (2015)](https://ui.adsabs.harvard.edu/abs/2015ApJ...812..158M/abstract). For spiral galaxies, HI and SFR densities are from [Leroy et al. (2008)](https://ui.adsabs.harvard.edu/abs/2008AJ....136.2782L/abstract), H2 from [Frank et al. (2016)](https://ui.adsabs.harvard.edu/abs/2016MNRAS.457.1722F/abstract) with a CO conversion factor ([Sandstrom et al. (2013)](https://ui.adsabs.harvard.edu/abs/2013ApJ...777....5S/abstract)), and rotation velocities from [Bacchini et al. (2019, 2020)](https://ui.adsabs.harvard.edu/abs/2019A%26A...622A..64B/abstract).
+```
+dΣ_gas/dt = Σ̇_acc − Σ_rSFR
+dΣ_★/dt = Σ_rSFR
+```
 
-- **Rotation Curves**: To model radially varying rotation speeds, we use the [SPARC catalog](http://astroweb.cwru.edu/SPARC/) ([Lelli et al. (2016)](https://ui.adsabs.harvard.edu/abs/2016AJ....152..157L/abstract)) to fit an exponential rotation curve and link it to the asymptotic flat velocity.
+where:
+- **Gas accretion**: Exponential temporal profile M̊<sub>acc</sub>(t) = C·e<sup>−ω<sub>acc</sub>t</sup> with accretion frequency ω<sub>acc</sub>
+- **Star formation**: Piecewise Kennicutt-Schmidt law based on [Kennicutt & de los Reyes (2021)](https://ui.adsabs.harvard.edu/abs/2021ApJ...908...61K/abstract) with a density cutoff
+- **Angular momentum**: Prescribed evolution j<sub>acc</sub>(t) linking to accretion radius via rotation curve
 
-- **Scaling Relations**: We compare our results for $j_{\mathrm{bar}}, M_{\mathrm{bar}}, f_{\mathrm{gas}}$ against the observational relation reported by [Mancera Piña et al. (2021b)](https://ui.adsabs.harvard.edu/abs/2021Natur.594..485M/abstract). We also adopt the Baryonic Tully–Fisher relation from [McGaugh (2012)](https://ui.adsabs.harvard.edu/abs/2012AJ....143...40M/abstract) to fix the final rotation velocity of each galaxy.
+### Star Formation Law
+
+We implement a piecewise Kennicutt-Schmidt relation with parameters from Kennicutt & de los Reyes (2021):
+
+- **High-density regime** (Σ<sub>gas</sub> > Σ<sub>threshold</sub>): Standard power-law relation
+- **Low-density regime**: Cutoff or modified slope to account for reduced star formation efficiency in galaxy outskirts
+
+Gas surface densities are corrected for helium with a factor of 1.36.
+
+### Rotation Curves
+
+Rotation velocity follows an exponential rise to a flat asymptotic value:
+
+```
+v_rot(R) = v_flat · [1 − exp(−R/R_v)]
+```
+
+where:
+- v<sub>flat</sub> is determined from the Baryonic Tully-Fisher Relation ([McGaugh 2012](https://ui.adsabs.harvard.edu/abs/2012AJ....143...40M/abstract))
+- R<sub>v</sub> is calibrated using the [SPARC catalogue](http://astroweb.cwru.edu/SPARC/)
+
+## References
+
+### Observational Constraints
+
+- **Scaling relations**: j<sub>bar</sub> − M<sub>bar</sub> − f<sub>gas</sub> from [Mancera Piña et al. (2021a,b)](https://ui.adsabs.harvard.edu/abs/2021Natur.594..485M/abstract)
+- **Baryonic Tully-Fisher**: [McGaugh (2012)](https://ui.adsabs.harvard.edu/abs/2012AJ....143...40M/abstract)
+
+### Rotation Curve Calibration
+
+- **SPARC catalogue**: [Lelli et al. (2016)](https://ui.adsabs.harvard.edu/abs/2016AJ....152..157L/abstract) — exponential rotation curve fitting
+
+### Star Formation Law Data
+
+- **Dwarf galaxies**: HI from [Iorio et al. (2017)](https://ui.adsabs.harvard.edu/abs/2017MNRAS.466.4159I/abstract), SFR from [McQuinn et al. (2015)](https://ui.adsabs.harvard.edu/abs/2015ApJ...808..109M/abstract)
+- **Spiral galaxies**: HI/SFR from [Leroy et al. (2008)](https://ui.adsabs.harvard.edu/abs/2008AJ....136.2782L/abstract), H₂ from [Frank et al. (2016)](https://ui.adsabs.harvard.edu/abs/2016MNRAS.457.1722F/abstract)
+- **Comprehensive compilation**: [Bacchini et al. (2020)](https://ui.adsabs.harvard.edu/abs/2020A%26A...641A..70B/abstract)
+
+## Authors
+
+**Andrea Costa**  
+Kapteyn Astronomical Institute, University of Groningen  
+📧 costa@astro.rug.nl
+
+**Supervisors**: Prof. dr. F. Fraternali, Dr. G. Pezzulli
+
+This work builds upon:
+
+- Costa, A. (2024). *Investigating the Dependence of the Baryonic j-M-f<sub>gas</sub> Relationship on Different Star Formation Laws*. Bachelor thesis, University of Groningen. [Link](https://fse.studenttheses.ub.rug.nl/33339/)
+- Cammilleri, E. (2022). *Origin of the Baryonic j-M-f<sub>gas</sub> relation*. Bachelor thesis, University of Groningen. [Link](https://fse.studenttheses.ub.rug.nl/28062/)
