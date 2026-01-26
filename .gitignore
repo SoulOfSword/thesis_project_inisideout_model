@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.pyc
+scripts/__pycache__/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -9,7 +10,7 @@ __pycache__/
 .env
 config_local.yaml
 secrets.yaml
-.~lock.baryons.csv#
+.~lock.*#
 .DS_Store
 rplots/
 
