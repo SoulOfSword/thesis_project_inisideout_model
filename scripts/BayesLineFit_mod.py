@@ -350,18 +350,18 @@ WARNING: OBSERVED VERTICAL SCATTER IS SMALLER THAN EXPECTED FROM Y-ERRORS. YOUR 
         plt.errorbar(x, y, xerr=err_x, yerr=err_y, fmt = ' ', ecolor = 'grey', capsize = 3, alpha=0.3, zorder=0)
         plt.scatter(x, y, color="magenta", edgecolor='k', linewidth=1, s=15, zorder=1)
         if plot_title == "boissier":
-            plt.plot(x_vec, y_vec, '-r', zorder=3, label=f"Fit: α={10**b_med[0]:.2e}, n={a_med[0]:.2f}")
-            plt.title(r"Boissier SFL")
-            plt.xlabel(r"log$(\Sigma_{gas})$ $(M_\odot pc^{-2})$")
-            plt.ylabel(r"log$(\Sigma_{SFR}/\Omega)$ $(M_\odot pc^{-2})$")
+            plt.plot(x_vec, y_vec, '-r', zorder=3, label=f"Bacchini+20 fit: α={10**b_med[0]:.2e}, n={a_med[0]:.2f}")
+            #plt.title(r"Boissier SFL")
+            plt.xlabel(r"log$(\Sigma_{\rm gas} / \rm M_\odot pc^{-2})$")
+            plt.ylabel(r"log$(\Sigma_{SFR}/\Omega / \rm M_\odot pc^{-2})$")
         if plot_title == "kennicutt":
-            plt.plot(x_vec, y_vec, '-r', zorder=3, label=f"Fit: A={10**b_med[0]:.2e}, N={a_med[0]:.2f}")
+            plt.plot(x_vec, y_vec, '-r', zorder=3, label=f"Bacchini+20 fit: A={10**b_med[0]:.2e}, N={a_med[0]:.2f}")
             plt.plot(x_vec, y_old_vec, '--o', zorder=3, label=f"K&dlR+21 (A={10**(-1.175):.2e}, N={1.54})")
-            plt.title(r"Kennicutt-Schmidt SFL")
-            plt.xlabel(r"log$(\Sigma_{gas})$ $(M_\odot pc^{-2})$")
-            plt.ylabel(r"log$(\Sigma_{SFR})$ $(M_\odot pc^{-2} Gyr^{-1})$")
+            #plt.title(r"Kennicutt-Schmidt SFL")
+            plt.xlabel(r"log$(\Sigma_{\rm gas} \, / \, \rm M_\odot pc^{-2})$")
+            plt.ylabel(r"log$(\Sigma_{SFR} \, / \, \rm M_\odot pc^{-2} Gyr^{-1})$")
         plt.grid(zorder=0)
-        plt.legend()
+        plt.legend(fontsize=8, loc="best")
         if orthfit:
             dist = np.sqrt( s_med**2 + (s_med*a_med)**2. )
             ymin = y_vec - dist
