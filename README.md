@@ -80,6 +80,8 @@ Kapteyn Astronomical Institute, University of Groningen
 
 **Supervisors**: Prof. dr. F. Fraternali, Dr. G. Pezzulli
 
+**Co-authors**: Dr. Pavel E. Mancera-Piña, Dr. Cecilia Bacchini
+
 This work builds upon:
 
 - Costa, A. (2024). *Investigating the Dependence of the Baryonic j-M-f<sub>gas</sub> Relationship on Different Star Formation Laws*. Bachelor thesis, University of Groningen. [Link](https://fse.studenttheses.ub.rug.nl/33339/)
