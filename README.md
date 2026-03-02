@@ -2,6 +2,8 @@
 
 This repository contains a semi-analytical galaxy evolution model developed to investigate the origin of the tight baryonic specific angular momentum–mass–gas fraction (j<sub>bar</sub> − M<sub>bar</sub> − f<sub>gas</sub>) scaling relation discovered by [Mancera Piña et al. (2021)](https://ui.adsabs.harvard.edu/abs/2021A%26A...651L..15M/abstract).
 
+**Disclaimer**: The code present here is a collection of the work I have done over 4 years, starting from the beginning of my second year of the Bachelor's. As you may expect, my coding skills were pretty horrendous back then, and I wrote spaghetti code which unfortunately I ended up using throughout the project. It would've taken too much time to rewrite everything and I needed to keep moving to write a thesis and eventually a paper. So cut me some slack :) 
+
 ## Scientific Objectives
 
 The primary goal is to demonstrate that the observed j<sub>bar</sub> − M<sub>bar</sub> − f<sub>gas</sub> relation can emerge naturally from first principles using galaxy evolution models. We compare **two distinct accretion scenarios**:
