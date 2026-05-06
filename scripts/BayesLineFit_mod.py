@@ -299,11 +299,11 @@ WARNING: OBSERVED VERTICAL SCATTER IS SMALLER THAN EXPECTED FROM Y-ERRORS. YOUR 
     # Write outputs
     if not quiet:
         print("Maximum likelihood (ML) value: %s" % (float('%.4g'%ML)))
-        print("Slope (ML, median, upper error, lower error): %s; %s; +%s, %s" % (float('%.4g'%a_ML), float('%.4g'%a_med), float('%.4g'%a_up), float('%.4g'%a_dw)))
-        print("Intercept (ML, median, upper error, lower error): %s; %s; +%s; %s" % (float('%.4g'%b_ML), float('%.4g'%b_med), float('%.4g'%b_up), float('%.4g'%b_dw)))
-        print("Intrinsic scatter (ML, median, upper error, lower error): %s; %s; +%s; %s" % (float('%.4g'%s_ML), float('%.4g'%s_med), float('%.4g'%s_up), float('%.4g'%s_dw)))
-        print("ML observed scatter (vertical): %s" % (float('%.4g'%rms_ML)))
-        print("ML observed scatter (orthogonal): %s" % (float('%.4g'%rms_ML_orth)))
+        print("Slope (ML, median, upper error, lower error): %s; %s; +%s, %s" % (float('%.4g'%a_ML.item()), float('%.4g'%a_med.item()), float('%.4g'%a_up.item()), float('%.4g'%a_dw.item())))
+        print("Intercept (ML, median, upper error, lower error): %s; %s; +%s; %s" % (float('%.4g'%b_ML.item()), float('%.4g'%b_med.item()), float('%.4g'%b_up.item()), float('%.4g'%b_dw.item())))
+        print("Intrinsic scatter (ML, median, upper error, lower error): %s; %s; +%s; %s" % (float('%.4g'%s_ML.item()), float('%.4g'%s_med.item()), float('%.4g'%s_up.item()), float('%.4g'%s_dw.item())))
+        print("ML observed scatter (vertical): %s" % (float('%.4g'%rms_ML.item())))
+        print("ML observed scatter (orthogonal): %s" % (float('%.4g'%rms_ML_orth.item())))
         print("*** NB medians and errors only meaningful for unimodal posteriors. Check the corner plot! ***")
         print("-------------------------")
 
@@ -313,11 +313,11 @@ WARNING: OBSERVED VERTICAL SCATTER IS SMALLER THAN EXPECTED FROM Y-ERRORS. YOUR 
         f.write("Spearman rho: %f; p-value: %f \n" % (Spearman[0], Spearman[1]))
         f.write("Kendall tau: %f; p-value: %f \n" % (Kendall[0],Kendall[1]))
         f.write("Maximum likelihood (ML) value: %s\n" % (float('%.4g'%ML)))
-        f.write("Slope (ML, median, upper error, lower error): %s; %s; +%s, %s\n" % (float('%.4g'%a_ML), float('%.4g'%a_med), float('%.4g'%a_up), float('%.4g'%a_dw)))
-        f.write("Intercept (ML, median, upper error, lower error): %s; %s; +%s; %s\n" % (float('%.4g'%b_ML), float('%.4g'%b_med), float('%.4g'%b_up), float('%.4g'%b_dw)))
-        f.write("Intrinsic scatter (ML, median, upper error, lower error): %s; %s; +%s; %s\n" % (float('%.4g'%s_ML), float('%.4g'%s_med), float('%.4g'%s_up), float('%.4g'%s_dw)))
-        f.write("ML rms observed scatter (vertical): %s\n" % (float('%.4g'%rms_ML)))
-        f.write("ML rms observed scatter (orthogonal): %s\n" % (float('%.4g'%rms_ML_orth)))
+        f.write("Slope (ML, median, upper error, lower error): %s; %s; +%s, %s\n" % (float('%.4g'%a_ML.item()), float('%.4g'%a_med.item()), float('%.4g'%a_up.item()), float('%.4g'%a_dw.item())))
+        f.write("Intercept (ML, median, upper error, lower error): %s; %s; +%s; %s\n" % (float('%.4g'%b_ML.item()), float('%.4g'%b_med.item()), float('%.4g'%b_up.item()), float('%.4g'%b_dw.item())))
+        f.write("Intrinsic scatter (ML, median, upper error, lower error): %s; %s; +%s; %s\n" % (float('%.4g'%s_ML.item()), float('%.4g'%s_med.item()), float('%.4g'%s_up.item()), float('%.4g'%s_dw.item())))
+        f.write("ML rms observed scatter (vertical): %s\n" % (float('%.4g'%rms_ML.item())))
+        f.write("ML rms observed scatter (orthogonal): %s\n" % (float('%.4g'%rms_ML_orth.item())))
         f.close()
 
     if outplot_corner is not None:
@@ -337,7 +337,7 @@ WARNING: OBSERVED VERTICAL SCATTER IS SMALLER THAN EXPECTED FROM Y-ERRORS. YOUR 
                 ax.axhline(Med_value[yi], color="r")
                 ax.plot(Med_value[xi], Med_value[yi], "sr")
         if plotpdf:
-            figure.savefig(outplot_corner+".pdf", format='pdf', dpi=300)
+            figure.savefig(outplot_corner+".pdf", format='pdf', dpi=300, bbox_inches='tight')
         else:
             figure.savefig(outplot_corner+".png")
 
@@ -372,7 +372,7 @@ WARNING: OBSERVED VERTICAL SCATTER IS SMALLER THAN EXPECTED FROM Y-ERRORS. YOUR 
             ymax = y_vec + s_med
             plt.fill_between(x_vec, ymin, ymax, color='k', alpha=0.2, zorder=2)
         if plotpdf:
-            fig.savefig(outplot_bestfit+".pdf", format='pdf', dpi=300)
+            fig.savefig(outplot_bestfit+".pdf", format='pdf', dpi=300, bbox_inches='tight')
         else:
             fig.savefig(outplot_bestfit+".png")
 
