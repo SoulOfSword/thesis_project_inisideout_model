@@ -1,0 +1,9 @@
+{
+  "form": "R_v[kpc] = 10**alpha * v_flat[km/s]**beta",
+  "alpha": 3.0651913422858263,
+  "beta": -1.376666240935142,
+  "alpha_err": 0.05327681857640458,
+  "beta_err": 0.02667466252786783,
+  "fit_method": "scipy.odr in log10 space, Boissier rotation-curve radii",
+  "n_galaxies": 75
+}

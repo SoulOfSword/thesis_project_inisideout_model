@@ -4,6 +4,50 @@ This repository contains a semi-analytical galaxy evolution model developed to i
 
 **Disclaimer**: The code present here is a collection of the work I have done over 4 years, starting from the beginning of my second year of the Bachelor's. As you may expect, my coding skills were pretty horrendous back then, and I wrote spaghetti code which unfortunately I ended up using throughout the project. It would've taken too much time to rewrite everything and I needed to keep moving to write a thesis and eventually a paper. So cut me some slack :) 
 
+## Code: layout & usage
+
+The model lives in an installable package `jmfgas` (`src/jmfgas/`) with thin terminal
+scripts in `scripts/`. Scripts add `src/` to the path themselves, so nothing needs
+installing to run them; for tests or interactive use, `pip install -e .`. Shared
+defaults are in `config/model.yaml`; run-specific values are CLI arguments. The
+notebooks in `notebooks/` are the frozen reference the package was ported from.
+Conventions and the module map are in `CLAUDE.md`; the migration record is
+`MIGRATION_PLAN.md`.
+
+```
+src/jmfgas/   physics/  models/ (JAX engine)  data/  inference/  viz/
+scripts/      data/  model/  inference/  plots/
+config/model.yaml   slurm/   tests/
+```
+
+### Pipeline
+
+```bash
+# 1. inputs: R_v(v_flat) power law + the observational samples
+python scripts/data/fit_rv_vflat.py
+python scripts/data/build_sample.py --sample converged          # + --with-hix for MCMC obs
+
+# 2. model artifacts (present-day grids, NIO band curves, comparison tracks)
+python scripts/model/save_io_grids.py       --params 0.39 1.28
+python scripts/model/save_nio_band.py       --params 0.96 0.23
+python scripts/model/save_comparison_npz.py --model io
+python scripts/model/save_comparison_npz.py --model nio
+
+# 3. inference — grid (CPU fan-out) or MCMC; both share the likelihoods
+python scripts/inference/run_grid.py --model io  --likelihood 4obs
+python scripts/inference/run_mcmc.py --model nio --likelihood 4obs --nsteps 2000
+python scripts/inference/plot_inference.py --grid  outputs/grids/grid_io_4obs_mcmc-obs.npz
+python scripts/inference/plot_inference.py --chain outputs/mcmc_chains/chain_nio_4obs_mcmc-obs.h5 --burn-in 500
+
+# 4. figures
+python scripts/model/run_final_planes.py --model io           # 3 planes (j-M-fgas, stellar, gaseous)
+python scripts/plots/compare_profiles.py all
+```
+
+On Leonardo, the heavy inference runs on a `dcgp` node: `sbatch slurm/run_grid.sbatch io 4obs`,
+`sbatch slurm/run_mcmc.sbatch nio 4obs mcmc-obs 32 2000`. `slurm/pipeline.sh` chains the whole
+thing (`sbatch --wait`); run it inside `tmux`. Tests: `pytest`.
+
 ## Scientific Objectives
 
 The primary goal is to demonstrate that the observed j<sub>bar</sub> − M<sub>bar</sub> − f<sub>gas</sub> relation can emerge naturally from first principles using galaxy evolution models. We compare **two distinct accretion scenarios**:

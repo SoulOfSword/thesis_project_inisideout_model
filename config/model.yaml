@@ -1,0 +1,59 @@
+# Shared defaults for the galaxy models and inference scripts.
+# Run-specific things (parameter values, sample choice, grid extents) go on the CLI.
+
+time:
+  t0: 12.0          # present-day time [Gyr]
+  dt: 0.1           # integration step [Gyr]
+
+mass_grid:
+  logM_min: 8.0
+  logM_max: 11.5
+  n: 50
+
+# baryonic mass - rotation velocity relation: v_flat = (M_bar / 10**A_log10) ** (1/exponent)
+btfr:
+  A_log10: 2.52
+  exponent: 3.58
+
+# maximum specific angular momentum: j_max = M_bar**slope * 10**log10_norm
+j_max:
+  slope: 0.73
+  log10_norm: -4.25
+
+sfl:
+  default: cutoff_ksl
+  Rf: 0.45                         # return fraction
+  threshold_sigma_SFR: 1.0861925626996982
+
+integration:
+  res: 120          # number of radial points
+  Rmax: 100.1       # outer radius [kpc]
+  n_j: 10           # j_acc grid points per mass
+
+mcmc:
+  io:
+    param_names: [n, k]
+    bounds:
+      n: [0.1, 2.5]
+      k: [1.0, 3.0]
+    init: [0.5, 2.]
+  nio:
+    param_names: [a, b]
+    bounds:
+      a: [-1.5, 7.0]
+      b: [-1.5, 5.0]
+    init: [1.5, 1.5]
+
+# adaptive coarse-to-fine logL grid (run_grid.py)
+grid:
+  coarse_n: 12          # cells per axis at each level
+  max_levels: 5         # zoom-level cap
+  target_spacing: 0.01  # stop once both axes are finer than this
+  dlogL: 6.0            # high-L mask is logL >= peak - dlogL (~3 sigma in 2D)
+
+paths:
+  data:        data
+  outputs:     outputs
+  mcmc_chains: outputs/mcmc_chains
+  grids:       outputs/grids
+  figures:     outputs/figures
