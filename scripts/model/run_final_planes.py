@@ -1,7 +1,7 @@
 """Draw the three final planes (j_bar-M_bar-f_gas, stellar, gaseous) for one model.
 
 --model io   uses the saved present-day grids in data/data9_JAX_aKSL/final_*_cutoff_ksl.txt
---model nio  runs the engine with omega(M) = a*(logM-10) + b for the given (a, b)
+--model nio  runs the engine with omega(M) = a*(Mbar/1e10)**b for the given (a, b)
 
 The model tracks (one line per fixed f_gas level, coloured by f_gas) overlay the
 observed CONVERGED sample and the external compilation samples. Three PDFs are
@@ -53,10 +53,41 @@ def full_baryonic_obs(data_dir):
             "log_jbar": np.log10(g("jbar")), "log_jbar_err": g("e_jbar") / g("jbar")}
 
 
+def stellar_arrays(data_dir):
+    """Stellar-plane points for all baryons ∩ stars galaxies (wider than converged)."""
+    from jmfgas.data import build_stellar
+    df = build_stellar(data_dir)
+    g = lambda c: df[c].values.astype(float)
+    return {"fgas": g("fgas"),
+            "log_Mstar": np.log10(g("Mstar")), "log_Mstar_err": g("e_Mstar") / g("Mstar"),
+            "log_jstar": np.log10(g("jstar")), "log_jstar_err": g("e_jstar") / g("jstar")}
+
+
+def gaseous_arrays(data_dir):
+    """Gaseous-plane points for all baryons ∩ gas galaxies (wider than converged)."""
+    from jmfgas.data import build_gaseous
+    df = build_gaseous(data_dir)
+    g = lambda c: df[c].values.astype(float)
+    return {"fgas": g("fgas"),
+            "log_Mgas": np.log10(g("Mgas")), "log_Mgas_err": g("e_Mgas") / g("Mgas"),
+            "log_jgas": np.log10(g("jgas")), "log_jgas_err": g("e_jgas") / g("jgas")}
+
+
 def compilation_frames(data_dir):
-    """Each CSV in compilation_AM_others -> {file stem: DataFrame}."""
+    """Compilation samples for the plane overlays (one DataFrame per stem). The two Dwarfs
+    files (used + not-used, disjoint galaxies) are concatenated into a single 'Dwarfs' series,
+    so they share one marker and one legend entry."""
     cdir = data_dir / "compilation_AM_others"
-    return {p.stem: pd.read_csv(p) for p in sorted(cdir.glob("*.csv"))}
+    frames = {p.stem: pd.read_csv(p) for p in sorted(cdir.glob("*.csv"))}
+    notused = data_dir / "compilation_AM_others_notused"
+    extra = notused / "Dwarfs.csv"
+    if "Dwarfs" in frames and extra.exists():
+        frames["Dwarfs"] = pd.concat([frames["Dwarfs"], pd.read_csv(extra)], ignore_index=True)
+    for name in ("GLSBs", "UDGs"):                # baryonic-only (no stellar/gaseous columns)
+        f = notused / f"{name}.csv"
+        if f.exists():
+            frames[name] = pd.read_csv(f)
+    return frames
 
 
 def io_model_grids(grid_dir):
@@ -134,6 +165,8 @@ def main():
                    help="only needed without --from")
     p.add_argument("--params", type=float, nargs=2, default=None, metavar=("P1", "P2"),
                    help="(n, k) or (a, b), with --model, instead of --from")
+    p.add_argument("--sample", default=None,
+                   help="observed sample for the baryonic plane (e.g. 'full'); default: converged")
     p.add_argument("--burn-in", type=int, default=50, help="chain burn-in if --from is an .h5")
     p.add_argument("--sfl", default=None, help="star-formation law (default: config sfl.default)")
     p.add_argument("--t0", type=float, default=None, help="present-day time [Gyr]")
@@ -163,9 +196,17 @@ def main():
         p0, p1 = args.params if args.params is not None else (None, None)
     else:
         raise SystemExit("pass --from <grid.npz|chain.h5>  (or --model with --params)")
+    if args.sample is not None:                       # --sample overrides (e.g. full with --model)
+        sample = args.sample
 
-    # a full-sample fit -> the baryonic plane shows every BARY+HIX galaxy, not just converged
-    obs_bary = full_baryonic_obs(data_dir) if sample == "full-hix" else obs
+    # a full-sample choice -> each plane shows its maximal per-plane set (+ compilations), not just
+    # the converged intersection: baryonic all BARY, stellar baryons∩stars, gaseous baryons∩gas
+    use_full = sample in ("full", "full-hix", "MP_full")
+    obs_by_tag = {
+        "baryonic": full_baryonic_obs(data_dir) if use_full else obs,
+        "stellar": stellar_arrays(data_dir) if use_full else obs,
+        "gaseous": gaseous_arrays(data_dir) if use_full else obs,
+    }
 
     if model == "io":
         if p0 is None:
@@ -192,10 +233,10 @@ def main():
         levels = FGAS_LEVELS[model][lkey]         # f_gas line set differs by model + plane
         fig, ax = plt.subplots(figsize=(8, 8), dpi=200, facecolor="w")
         if tag == "baryonic":
-            fn(ax, logM, grids["j_bar"], grids["f_gas"], obs_bary, comp,
+            fn(ax, logM, grids["j_bar"], grids["f_gas"], obs_by_tag[tag], comp,
                params_label=label, levels=levels)
         else:
-            fn(ax, grids[mkey], grids[j_for[tag]], grids["f_gas"], obs, comp,
+            fn(ax, grids[mkey], grids[j_for[tag]], grids["f_gas"], obs_by_tag[tag], comp,
                params_label=label, levels=levels)
         _save(fig, out_dir / f"plane_{tag}_{stem}.pdf")
 

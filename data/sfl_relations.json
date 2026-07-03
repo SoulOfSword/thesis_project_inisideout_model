@@ -1,0 +1,38 @@
+{
+  "form": {
+    "boissier": "Sigma_SFR/Omega = alpha * Sigma_gas**n  [Msun/pc^2, yr^-1]",
+    "new_ksl": "Sigma_SFR = alpha * Sigma_gas**n  [Msun/pc^2/Gyr]",
+    "old_ksl": "canonical low-slope law (fixed, not fitted)",
+    "cutoff_ksl": "new_ksl below cutoff_threshold, old_ksl above"
+  },
+  "boissier": {
+    "alpha": 0.000571206592734208,
+    "n": 2.1423143942094436,
+    "n_err_up": 0.09734378996321968,
+    "n_err_dw": -0.08834388492537792,
+    "log_alpha": -3.243206788676623,
+    "log_alpha_err_up": 0.08336596555904885,
+    "log_alpha_err_dw": -0.0904803449324052,
+    "scatter": 0.13873089976997266
+  },
+  "new_ksl": {
+    "alpha": 0.001586307813871056,
+    "n": 3.2535418296174354,
+    "n_err_up": 0.12893589867236077,
+    "n_err_dw": -0.1185968442907428,
+    "log_alpha": -2.799612536504722,
+    "log_alpha_err_up": 0.10791545165046168,
+    "log_alpha_err_dw": -0.11600059286034758,
+    "scatter": 0.15483225213895235
+  },
+  "old_ksl": {
+    "alpha": 0.1625,
+    "n": 1.4
+  },
+  "cutoff_threshold": 1.084661737703847,
+  "fit_method": "BayesLineFit orthogonal scatter, resolved gas+SFR profiles",
+  "n_points": {
+    "boissier": 343,
+    "ksl": 513
+  }
+}

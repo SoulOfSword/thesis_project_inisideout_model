@@ -2,8 +2,10 @@
 
 --model io  : per-galaxy omega from inverting j_bar at the IO (n, k), binned per mass.
 --model nio : per-mass-bin best-fit omega from the NIO 4obs scan (engine; run on a node).
+--model both: binned IO omega (inverted j_bar, full sample) + the NIO power-law line,
+              for hand-picked (--io-params n k) and (--nio-params a b). Light.
 
-Both overlay the NIO law omega = a(logM - 10) + b for the grid and/or MCMC (a, b).
+The io/nio modes overlay the NIO law omega = a(logM - 10) + b for the grid and/or MCMC (a, b).
 The io run also prints the omega spread, which sets the accretion-rate grid for the planes.
 """
 
@@ -23,7 +25,7 @@ from jmfgas.config import load_config
 from jmfgas.inference.build import obs_table
 from jmfgas.inference.omega import omega_per_galaxy
 
-_MASS_BINS = np.arange(8, 12, 0.5)
+_MASS_BINS = np.arange(8, 12.5, 0.5)            # covers the full sample (up to logM ~ 11.8)
 _NIO_COLS = ("logMbar", "jbar", "Mgas", "e_Mgas", "Mstar", "e_Mstar",
              "jgas", "e_jgas", "jstar", "e_jstar")
 
@@ -86,6 +88,30 @@ def io_diagnostic(args, data_dir, lines):
 
 
 def nio_diagnostic(args, data_dir, lines):
+    cen, best, lo, hi = _nio_scan(args, data_dir)
+    v = np.isfinite(best)
+    fig, ax = plt.subplots(figsize=(7, 5), dpi=200, facecolor="w")
+    ax.errorbar(cen[v], best[v], xerr=0.25, yerr=[best[v] - lo[v], hi[v] - best[v]],
+                fmt="o", color="steelblue", capsize=3, alpha=0.85, label="NIO per-bin fit")
+    _draw_nio(ax, lines)
+    return fig
+
+
+def _io_binned(logM, jbar, n, k):
+    """Per-galaxy IO omega (inverted j_bar, clipped to +-10) -> (cen, median, 16, 84) per bin."""
+    omega = np.clip(omega_per_galaxy(logM, jbar, n, k)[0], -10.0, 10.0)
+    cen = 0.5 * (_MASS_BINS[:-1] + _MASS_BINS[1:])
+    med = np.full(len(cen), np.nan); lo = med.copy(); hi = med.copy()
+    for i in range(len(cen)):
+        v = omega[(logM >= _MASS_BINS[i]) & (logM < _MASS_BINS[i + 1])]
+        if len(v):
+            med[i], lo[i], hi[i] = np.percentile(v, [50, 16, 84])
+    return cen, med, lo, hi
+
+
+def _nio_scan(args, data_dir):
+    """NIO per-mass-bin best-fit omega (a=0) from the 4obs scan -> (cen, best, lo, hi).
+    Heavy: loky workers + the engine, so run on a node."""
     from loky import get_reusable_executor
     t = obs_table(args.sample, data_dir)
     logM = t["logMbar"]
@@ -97,7 +123,6 @@ def nio_diagnostic(args, data_dir, lines):
     ex = get_reusable_executor(max_workers=min(n_bins, args.max_workers), initializer=_init_worker)
     rows = list(ex.map(_scan_bin, tasks))
     ex.shutdown(wait=True, kill_workers=True)
-
     cen = 0.5 * (_MASS_BINS[:-1] + _MASS_BINS[1:])
     best = np.full(n_bins, np.nan); lo = best.copy(); hi = best.copy()
     for i, row in enumerate(rows):
@@ -114,21 +139,40 @@ def nio_diagnostic(args, data_dir, lines):
         lo[i], hi[i] = omega_grid[l], omega_grid[r]
         print(f"  logM [{_MASS_BINS[i]:.1f},{_MASS_BINS[i+1]:.1f})  N={int(masks[i].sum()):2d}  "
               f"omega={best[i]:+.2f}  [{lo[i]:+.2f}, {hi[i]:+.2f}]")
-    v = np.isfinite(best)
-    fig, ax = plt.subplots(figsize=(7, 5), dpi=200, facecolor="w")
-    ax.errorbar(cen[v], best[v], xerr=0.25, yerr=[best[v] - lo[v], hi[v] - best[v]],
-                fmt="o", color="steelblue", capsize=3, alpha=0.85, label="NIO per-bin fit")
-    _draw_nio(ax, lines)
+    return cen, best, lo, hi
+
+
+def both_diagnostic(args, data_dir):
+    """Binned IO omega (inverted j_bar, full sample) + the NIO analytical power-law line."""
+    import jax.numpy as jnp
+    from jmfgas.models.non_inside_out import omega_Mdep
+    if args.io_params is None or args.nio_params is None:
+        raise SystemExit("--model both needs --io-params n k and --nio-params a b")
+    n, k = (float(v) for v in args.io_params)
+    a, b = (float(v) for v in args.nio_params)
+    t = obs_table(args.sample, data_dir)
+    io_cen, io_med, io_lo, io_hi = _io_binned(np.asarray(t["logMbar"]), np.asarray(t["jbar"]), n, k)
+
+    fig, ax = plt.subplots(figsize=(4, 4), dpi=300, facecolor="w")
+    vi = np.isfinite(io_med)
+    ax.errorbar(io_cen[vi], io_med[vi], xerr=0.25,
+                yerr=[io_med[vi] - io_lo[vi], io_hi[vi] - io_med[vi]], fmt="o",
+                capsize=2, alpha=0.85, color="royalblue", label=rf"IO binned ($n={n:.2f}$, $k={k:.2f}$)")
+    xl = np.linspace(_MASS_BINS[0], _MASS_BINS[-1], 100)
+    ax.plot(xl, np.asarray(omega_Mdep(jnp.asarray(xl), a, b)), color="r", lw=2.5, zorder=5,
+            label=rf"NIO law: $\omega={a:g}\,(M_{{\rm bar}}/10^{{10}})^{{{b:g}}}$")
     return fig
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--model", choices=["io", "nio"], required=True)
+    p.add_argument("--model", choices=["io", "nio", "both"], required=True)
     p.add_argument("--sample", default="mcmc-obs")
     p.add_argument("--io-grid", type=Path, default=ROOT / "outputs/grids/grid_io_4obs_grid-obs.npz")
     p.add_argument("--io-params", type=float, nargs=2, default=None, metavar=("n", "k"))
+    p.add_argument("--nio-params", type=float, nargs=2, default=None, metavar=("a", "b"),
+                   help="NIO power-law omega = a*(Mbar/1e10)**b, for --model both")
     p.add_argument("--nio-grid", type=Path, default=ROOT / "outputs/grids/grid_nio_4obs_grid-obs.npz")
     p.add_argument("--nio-chain", type=Path,
                    default=ROOT / "outputs/mcmc_chains/chain_nio_4obs_mcmc-obs_20260606.h5")
@@ -144,14 +188,17 @@ def main():
 
     cfg = load_config(args.config)
     data_dir = ROOT / cfg["paths"]["data"]
-    lines = _nio_lines(args)
-    fig = io_diagnostic(args, data_dir, lines) if args.model == "io" \
-        else nio_diagnostic(args, data_dir, lines)
+    if args.model == "both":
+        fig = both_diagnostic(args, data_dir)
+    else:
+        lines = _nio_lines(args)
+        fig = io_diagnostic(args, data_dir, lines) if args.model == "io" \
+            else nio_diagnostic(args, data_dir, lines)
 
     ax = fig.axes[0]
     ax.axhline(0, color="gray", ls="--", alpha=0.5)
-    ax.set_xlabel(r"$\log(M_{\rm bar}\,/\,\rm M_\odot)$", fontsize=12)
-    ax.set_ylabel(r"$\omega_{\rm acc}$ (Gyr$^{-1}$)", fontsize=12)
+    ax.set_xlabel(r"$\log(M_{\rm bar}\,/\,\rm M_\odot)$", fontsize=14)
+    ax.set_ylabel(r"$\omega_{\rm acc}$ (Gyr$^{-1}$)", fontsize=14)
     ax.legend(fontsize=9, loc="upper left"); ax.grid(alpha=0.3); fig.tight_layout()
     out = args.out or (ROOT / cfg["paths"]["figures"] / f"omega_vs_mass_{args.model}.pdf")
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -348,29 +348,40 @@ WARNING: OBSERVED VERTICAL SCATTER IS SMALLER THAN EXPECTED FROM Y-ERRORS. YOUR 
         y_vec = a_med*x_vec + b_med
         y_old_vec = 1.54*x_vec - 1.175  # K&dlR+21
         plt.errorbar(x, y, xerr=err_x, yerr=err_y, fmt = ' ', ecolor = 'grey', capsize = 3, alpha=0.3, zorder=0)
-        plt.scatter(x, y, color="magenta", edgecolor='k', linewidth=1, s=15, zorder=1)
         if plot_title == "boissier":
-            plt.plot(x_vec, y_vec, '-r', zorder=3, label=f"Bacchini+20 fit: α={10**b_med[0]:.2e}, n={a_med[0]:.2f}")
+            plt.errorbar(x, y, xerr=err_x, yerr=err_y, fmt = ' ', ecolor = 'grey', capsize = 3, alpha=0.3, zorder=0)
+            plt.scatter(x, y, color="#4ECA80", linewidth=0.5, edgecolor='k', s=15, zorder=1)
+            plt.plot(x_vec, y_vec, '-', c='#EC5987', zorder=3, label=f"Bacchini+20 fit: α={10**b_med[0]:.2e}, n={a_med[0]:.2f}")
             #plt.title(r"Boissier SFL")
             plt.xlabel(r"log$(\Sigma_{\rm gas} / \rm M_\odot pc^{-2})$")
             plt.ylabel(r"log$(\Sigma_{SFR}/\Omega / \rm M_\odot pc^{-2})$")
         if plot_title == "kennicutt":
-            plt.plot(x_vec, y_vec, '-r', zorder=3, label=f"Bacchini+20 fit: A={10**b_med[0]:.2e}, N={a_med[0]:.2f}")
-            plt.plot(x_vec, y_old_vec, '--o', zorder=3, label=f"K&dlR+21 (A={10**(-1.175):.2e}, N={1.54})")
+            plt.errorbar(x, y, xerr=err_x, yerr=err_y, fmt = ' ', ecolor = 'lightskyblue', capsize = 3, alpha=0.2, zorder=0)
+            plt.scatter(x, y, color="lightskyblue", edgecolor='k', linewidth=0.5, s=15, zorder=1, alpha=0.4)
+            plt.plot(x_vec, y_vec, '-', c='#EC5987', lw=2, zorder=4, label=f"A={10**b_med[0]:.2e}, N={a_med[0]:.2f}")
+            plt.plot(x_vec, y_old_vec, '--', c="#2965E5", lw=2, zorder=3, label=f"K&dlR+21 (A={10**(-1.175):.2e}, N={1.54})")
             #plt.title(r"Kennicutt-Schmidt SFL")
             plt.xlabel(r"log$(\Sigma_{\rm gas} \, / \, \rm M_\odot pc^{-2})$")
             plt.ylabel(r"log$(\Sigma_{SFR} \, / \, \rm M_\odot pc^{-2} Gyr^{-1})$")
+        if plot_title == 'rvflat':
+            plt.errorbar(x, y, xerr=err_x, yerr=err_y, fmt = ' ', ecolor = 'grey', capsize = 3, alpha=0.3, zorder=0)
+            plt.scatter(x, y, color="#4ECA80", edgecolor='k', linewidth=0.5, s=25, zorder=1)
+            plt.plot(x_vec, y_vec, '-', c='#EC5987', zorder=3, label=r"$\gamma$"+f"={a_med[0]:.2f}, "+r"$\delta$"+f"={b_med[0]:.2f}")
+            #plt.title(r"$R_{\rm flat}$ vs $V_{\rm flat}$")
+            plt.xlabel(r"log$(V_{\rm flat} / \rm 100\,km\,s^{-1})$")
+            plt.ylabel(r"log$(R_{\rm v} / \rm kpc)$")
+            plt.ylim(-1.5)
         plt.grid(zorder=0)
         plt.legend(fontsize=8, loc="best")
         if orthfit:
             dist = np.sqrt( s_med**2 + (s_med*a_med)**2. )
             ymin = y_vec - dist
             ymax = y_vec + dist
-            plt.fill_between(x_vec, ymin, ymax, color='k', alpha=0.2, zorder=2)
+            plt.fill_between(x_vec, ymin, ymax, color='#F19CB7', alpha=0.2, zorder=2)
         else:
             ymin = y_vec - s_med
             ymax = y_vec + s_med
-            plt.fill_between(x_vec, ymin, ymax, color='k', alpha=0.2, zorder=2)
+            plt.fill_between(x_vec, ymin, ymax, color='#F19CB7', alpha=0.2, zorder=2)
         if plotpdf:
             fig.savefig(outplot_bestfit+".pdf", format='pdf', dpi=300, bbox_inches='tight')
         else:

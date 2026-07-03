@@ -41,7 +41,7 @@ def test_j_acc_def():
 def test_rv_def_uses_fitted_powerlaw():
     rel = json.load(open(jmfgas.ROOT / "data" / "rv_vflat_relation.json"))
     kpc = rv_def(M) / 1000.0
-    assert np.allclose(kpc, 10.0**rel["alpha"] * v_btfr_def(M) ** rel["beta"])
+    assert np.allclose(kpc, 10.0**rel["delta"] * (v_btfr_def(M) / 100.0) ** rel["gamma"])
     assert np.all(kpc > 0)  # power law stays positive at all masses
 
 
@@ -75,7 +75,10 @@ def test_sfl_cutoff_numpy_matches_jax():
 
 def test_sfl_cutoff_matches_formula():
     from jmfgas.physics import Rf, threshold_sigma_SFR
+    rel = json.load(open(jmfgas.ROOT / "data" / "sfl_relations.json"))
+    new, old = rel["new_ksl"], rel["old_ksl"]
     sigma = np.logspace(-2, 3, 200)
     mask = np.log10(sigma) < threshold_sigma_SFR
-    expect = np.where(mask, (1 - Rf) * 1.59e-3 * sigma**3.25, (1 - Rf) * 0.1625 * sigma**1.4)
+    expect = np.where(mask, (1 - Rf) * new["alpha"] * sigma**new["n"],
+                      (1 - Rf) * old["alpha"] * sigma**old["n"])
     assert np.allclose(SFL(sigma, "cutoff_ksl", None, 1e10), expect)

@@ -13,7 +13,6 @@ Figures (pick with the positional command, default `all`):
 """
 
 import argparse
-import glob
 import sys
 from fractions import Fraction
 from pathlib import Path
@@ -28,15 +27,17 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from jmfgas.config import load_config
-from jmfgas.data import build_converged
+from jmfgas.data import build_converged, sample_frame
 from jmfgas.viz import prep_curve, swept_band
+from jmfgas.viz.planes import _COMPILATION_MARKERS
 
 DEFAULT_GALAXIES = ["NGC3627", "UGC04278"]
 DEFAULT_BINS = [(9.0, 9.5), (9.7, 10.3), (10.8, 11.2)]
 
-GALAXY_TYPES = ["Dwarfs", "superthin", "HIX", "superspirals"]
-MARKER_MAP = {"Dwarfs": "p", "superthin": "s", "HIX": "X", "superspirals": "D"}
-COLOR_MAP = {"Dwarfs": "orange", "superthin": "cyan", "HIX": "green", "superspirals": "purple"}
+# mosaic data markers/colors per sample group (markers match the final planes)
+GROUP_MARKER = {"MP+21b": "o", **_COMPILATION_MARKERS}
+GROUP_COLOR = {"MP+21b": "magenta", "Dwarfs": "orange", "superthin": "cyan", "HIX": "green",
+               "superspirals": "purple", "GLSBs": "brown", "UDGs": "deeppink"}
 
 
 # ── data loading ─────────────────────────────────────────────────────────────
@@ -237,36 +238,55 @@ def plot_time_evolution(galaxy, p, times_to_plot=(3, 6, 9, 12), x_max=None, mode
 
 # ── figure: j_bar-f_gas mosaic ───────────────────────────────────────────────
 
-def plot_mosaic(bins, paths):
-    conv = build_converged(paths["data"])
-    log_Mbar = np.log10(conv["Mbar"].values.astype(float))
+_IO_OMEGA = np.array([-1.0, -0.3, 0.1, 1.0 / 3.0, 0.75, 1.0, 2.0, 4.0, 8.0, 10.0])
 
-    obs_data_m = {}
-    for i, (lo, hi) in enumerate(bins):
-        mask = (log_Mbar >= lo) & (log_Mbar <= hi)
-        obs_data_m[i] = conv[mask].copy().reset_index(drop=True)
-        print(f"  bin [{lo}, {hi}]: {mask.sum()} CONVERGED galaxies")
 
-    compilation = {}
-    for gtype in GALAXY_TYPES:
-        df = pd.read_csv(paths["data"] / "compilation_AM_others" / f"{gtype}.csv")
-        for col in ["logMbar", "logjbar", "fgas"]:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-        compilation[gtype] = df
+def _io_grids_live(logM, n, k, sfl):
+    """IO present-day f_gas/j_bar over (mass x omega) at (n, k), run live (no saved tables)."""
+    import jax.numpy as jnp
+    from jmfgas.models.inside_out import build_r_acc_matrix_for_all_M_jax, run_all_masses
+    t_acc = jnp.asarray(1.0 / _IO_OMEGA, dtype=jnp.float64)
+    r_acc = build_r_acc_matrix_for_all_M_jax(jnp.float64(n), jnp.float64(k))
+    out = run_all_masses(jnp.asarray(10.0 ** logM, dtype=jnp.float64), t_acc, r_acc,
+                         jnp.asarray(logM, dtype=jnp.float64), star_formation_law=sfl)
+    return {"f_gas": np.asarray(out[0]), "j_bar": np.asarray(out[1])}
+
+
+def _nio_band_live(logM, a, b, n_j, sfl):
+    """NIO (j_bar, f_gas) swept over j_acc at fixed mass, omega from the (a, b) power law."""
+    import jax.numpy as jnp
+    from jmfgas.models import build_r_acc_for_single_M
+    from jmfgas.models.non_inside_out import Full_final_definer_Mdep_omega_jax
+    r_acc_pc, _ = build_r_acc_for_single_M(logM, n_j=n_j)
+    f_gas, j_bar, _, _, _, _ = Full_final_definer_Mdep_omega_jax(
+        float(logM), a, b, jnp.asarray(r_acc_pc, dtype=jnp.float64),
+        star_formation_law=sfl, at_t0=True)
+    return np.asarray(j_bar), np.asarray(f_gas)
+
+
+def plot_mosaic(bins, paths, n, k, a, b, sfl, n_j, band_step=0.05):
+    full = sample_frame("full", paths["data"])             # full sample: all 7 groups, with errors
+    full_logM = np.log10(full["Mbar"].to_numpy(float))
+    full_logj = np.log10(full["jbar"].to_numpy(float))
+    full_fgas = full["fgas"].to_numpy(float)
+    full_jbar = full["jbar"].to_numpy(float)
+    full_group = full["group"].to_numpy()
+    e_logj = full["e_jbar"].to_numpy(float) / full_jbar / np.log(10)
+    e_fg = full["e_fgas"].to_numpy(float)
+    for lo, hi in bins:
+        print(f"  bin [{lo}, {hi}]: {int(((full_logM >= lo) & (full_logM <= hi)).sum())} galaxies (full)")
 
     logM_grid_io = np.linspace(8, 11.5, 50)
-    io_fgrid = np.nan_to_num(np.loadtxt(paths["grids"] / "final_f_gas_cutoff_ksl.txt"), nan=np.nan)
-    io_jgrid = np.nan_to_num(np.loadtxt(paths["grids"] / "final_j_bar_cutoff_ksl.txt"), nan=np.nan)
+    io_grids = _io_grids_live(logM_grid_io, n, k, sfl)              # live at (n, k); no saved tables
+    io_fgrid, io_jgrid = io_grids["f_gas"], io_grids["j_bar"]
 
     nio_band = {}
-    for fp in sorted(glob.glob(str(paths["nio_band"] / "jbar_fgas_logM*.csv"))):
-        m = round(float(fp.split("logM")[-1].replace(".csv", "")), 4)
-        d = pd.read_csv(fp)
-        nio_band[m] = (d["j_bar_kpc_km_s"].values, d["f_gas"].values)
+    for lo, hi in bins:
+        for m in np.round(np.arange(lo, hi + 1e-9, band_step), 4):
+            if m not in nio_band:
+                nio_band[m] = _nio_band_live(float(m), a, b, n_j, sfl)   # live, power-law omega
     nio_band_masses = np.array(sorted(nio_band.keys()))
     have_nio_band = len(nio_band_masses) > 0
-    if not have_nio_band:
-        print("NIO band profiles not found -> falling back to the central NIO line only.")
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5), dpi=150, sharey=True)
     for i, (lo, hi) in enumerate(bins):
@@ -299,23 +319,15 @@ def plot_mosaic(bins, paths):
             ax.plot(lj_c, f_c, color="red", lw=3, ls="--",
                     label=f"Non-inside-out ($10^{{{mlbl}}}$)", zorder=3)
 
-        df_obs = obs_data_m[i]
-        vo = (df_obs["jbar"] > 0) & (df_obs["fgas"] > 0)
-        oj = np.log10(df_obs.loc[vo, "jbar"].values)
-        of = df_obs.loc[vo, "fgas"].values
-        oj_e = df_obs.loc[vo, "e_jbar"].values / df_obs.loc[vo, "jbar"].values / np.log(10)
-        of_e = df_obs.loc[vo, "e_fgas"].values
-        ax.scatter(oj, of, c="magenta", s=50, edgecolors="k", alpha=0.7, zorder=5, label="MP+21b")
-        ax.errorbar(oj, of, xerr=oj_e, yerr=of_e, fmt=" ", ecolor="grey",
-                    capsize=3, alpha=0.5, zorder=4)
-
-        for gtype in GALAXY_TYPES:
-            df = compilation[gtype]
-            m = ((df["logMbar"] >= lo) & (df["logMbar"] <= hi)
-                 & df["logjbar"].notna() & df["fgas"].notna())
-            if m.sum() > 0:
-                ax.scatter(df.loc[m, "logjbar"], df.loc[m, "fgas"], c=COLOR_MAP[gtype], s=60,
-                           edgecolors="k", alpha=0.8, zorder=6, marker=MARKER_MAP[gtype], label=gtype)
+        in_bin = (full_logM >= lo) & (full_logM <= hi) & (full_jbar > 0) & (full_fgas > 0)
+        for grp in GROUP_MARKER:                           # every sample group present in the bin
+            m = in_bin & (full_group == grp)
+            if not m.any():
+                continue
+            ax.scatter(full_logj[m], full_fgas[m], c=GROUP_COLOR.get(grp, "gray"), s=55,
+                       edgecolors="k", alpha=0.8, zorder=6, marker=GROUP_MARKER[grp], label=grp)
+            ax.errorbar(full_logj[m], full_fgas[m], xerr=e_logj[m], yerr=e_fg[m], fmt=" ",
+                        ecolor="grey", capsize=2, alpha=0.4, zorder=4)
 
         ax.set_title(rf"$10^{{{lo:g}}}\!-\!10^{{{hi:g}}}\,M_\odot$", fontsize=15)
         ax.set_xlabel(r"$\log(j_{\rm bar} \, / \, {\rm kpc \, km \, s^{-1}})$", fontsize=16)
@@ -334,12 +346,44 @@ def plot_mosaic(bins, paths):
 
 # ── figures: assumptions-vs-results comparison ───────────────────────────────
 
-def _load_comparison(paths):
-    nio_high = _load_npz(paths["nio_prof"] / "comparison_nio_high_jacc.npz")
-    nio_low = _load_npz(paths["nio_prof"] / "comparison_nio_low_jacc.npz")
-    io_pos = _load_npz(paths["io_prof"] / "comparison_io_pos_omega.npz")
-    io_neg = _load_npz(paths["io_prof"] / "comparison_io_neg_omega.npz")
-    return nio_high, nio_low, io_pos, io_neg
+def _comparison_io_live(logM, n, k, sfl):
+    """IO growing/decaying-omega illustration profiles at (n, k), run live -> (pos, neg)."""
+    import jax.numpy as jnp
+    from jmfgas.models.common import log_M_bar_array_jax, M_times1, C_def_jax
+    from jmfgas.models.inside_out import build_r_acc_matrix_for_all_M_jax
+    from jmfgas.physics.angmom import j_maxer, j_acc_def
+    from jmfgas.models.profiles import radial_profiles_io
+    M_bar = 10.0 ** logM
+    r_acc = build_r_acc_matrix_for_all_M_jax(jnp.float64(n), jnp.float64(k))
+    j_acc_t = np.asarray(j_acc_def(j_maxer(M_bar), M_times1, n=n, con=k))
+    dicts = []
+    for omega in (1.0 / 2.0, -1.0 / 2.0):
+        prof = {kk: (np.asarray(v) if hasattr(v, "shape") else v)
+                for kk, v in radial_profiles_io(logM, 1.0 / omega, r_acc,
+                                                 log_M_bar_array_jax, sfl_type=sfl).items()}
+        prof.update(omega=omega, C=float(C_def_jax(M_bar, 1.0 / omega)),
+                    M_bar=M_bar, j_acc_t=j_acc_t, k=k, n=n)
+        dicts.append(prof)
+    return dicts[0], dicts[1]
+
+
+def _comparison_nio_live(logM, a, b, sfl):
+    """NIO high/low-j_acc illustration profiles with the power-law omega, run live -> (high, low)."""
+    import jax.numpy as jnp
+    from jmfgas.models.common import C_def_jax
+    from jmfgas.physics.angmom import j_maxer
+    from jmfgas.models.non_inside_out import omega_Mdep
+    from jmfgas.models.profiles import radial_profiles_nio
+    M_bar = 10.0 ** logM
+    j_max = float(j_maxer(M_bar))
+    omega = float(omega_Mdep(jnp.float64(logM), a, b))           # power law (was linear a*(logM-10)+b)
+    C = float(C_def_jax(M_bar, 1.0 / omega))
+    dicts = []
+    for j_val in (j_max, j_max / 10.0):
+        prof = dict(radial_profiles_nio(logM, j_val, a, b, sfl_type=sfl))
+        prof.update(C=C, j_acc_value=j_val, M_bar=M_bar)         # prof['omega'] is already power-law
+        dicts.append(prof)
+    return dicts[0], dicts[1]
 
 
 def plot_nio_2panel(nio_high, nio_low):
@@ -392,8 +436,8 @@ def plot_nio_2panel(nio_high, nio_low):
     l2, lab2 = ax_jbar.get_legend_handles_labels()
     ax_right.legend(l1 + l2, lab1 + lab2, loc="center right", fontsize=7, framealpha=0.9)
 
-    fig.suptitle(rf"Non-Inside-Out Model ($M_{{\rm bar}} = 10^{{10}}\,M_\odot$, "
-                 rf"$\omega_{{\rm acc}} = {omega:.0f}\,{{\rm Gyr}}^{{-1}}$)",
+    fig.suptitle(rf"Non-Inside-Out Model ($M_{{\rm bar}} = 10^{{{np.log10(float(nio_high['M_bar'])):.1f}}}"
+                 rf"\,M_\odot$, $\omega_{{\rm acc}} = {omega:.2g}\,{{\rm Gyr}}^{{-1}}$)",
                  fontsize=10, fontweight="bold")
     plt.tight_layout()
     return fig
@@ -457,7 +501,8 @@ def plot_io_2panel(io_pos, io_neg):
     l2, lab2 = ax_jbar.get_legend_handles_labels()
     ax_right.legend(l1 + l2, lab1 + lab2, loc="lower right", fontsize=7, framealpha=0.9)
 
-    fig.suptitle(r"Inside-Out Model ($M_{\rm bar} = 10^{10}\,M_\odot$, $k=1.5$, $n=0.5$)",
+    fig.suptitle(rf"Inside-Out Model ($M_{{\rm bar}} = 10^{{{np.log10(float(io_pos['M_bar'])):.1f}}}"
+                 rf"\,M_\odot$, $k={float(io_pos['k']):.2g}$, $n={float(io_pos['n']):.2g}$)",
                  fontsize=10, fontweight="bold")
     plt.tight_layout()
     return fig
@@ -511,8 +556,8 @@ def plot_nio_split(nio_high, nio_low):
     ax.grid(True, alpha=0.3); ax.tick_params(labelsize=12)
     ax.set_xlim(0.1, 12)
 
-    fig.suptitle(rf"Non-Inside-Out Model ($M_{{\rm bar}}=10^{{10}}\,M_\odot$, "
-                 rf"$\omega_{{\rm acc}}={omega:.0f}\,{{\rm Gyr}}^{{-1}}$)",
+    fig.suptitle(rf"Non-Inside-Out Model ($M_{{\rm bar}}=10^{{{np.log10(float(nio_high['M_bar'])):.1f}}}"
+                 rf"\,M_\odot$, $\omega_{{\rm acc}}={omega:.2g}\,{{\rm Gyr}}^{{-1}}$)",
                  fontsize=14, fontweight="bold")
     plt.tight_layout()
     return fig
@@ -573,7 +618,8 @@ def plot_io_split(io_pos, io_neg):
     ax.grid(True, alpha=0.3); ax.tick_params(labelsize=12)
     ax.set_xlim(0.1, 12)
 
-    fig.suptitle(r"Inside-Out Model ($M_{\rm bar}=10^{10}\,M_\odot$, $k=1.5$, $n=0.5$)",
+    fig.suptitle(rf"Inside-Out Model ($M_{{\rm bar}}=10^{{{np.log10(float(io_pos['M_bar'])):.1f}}}"
+                 rf"\,M_\odot$, $k={float(io_pos['k']):.2g}$, $n={float(io_pos['n']):.2g}$)",
                  fontsize=14, fontweight="bold")
     plt.tight_layout()
     return fig
@@ -592,26 +638,25 @@ def plot_combined(nio_high, nio_low, io_pos, io_neg):
     ax = axes[0, 0]
     ax.plot(times_nio, M_dot_nio, "k-", lw=1.5, label=r"$\dot{M}_{\rm acc}(t)$")
     ax.set_ylabel(r"$\dot{M}_{\rm acc}$ ($M_\odot\,{\rm Gyr}^{-1}$)", fontsize=9)
-    ax.set_yscale("log")
-    ax.set_xlim(0, 12)
+    ax.set_xlim(0, 12)                                  # linear: omega=0.1 spans <1 decade, log ticks look odd
     ax.tick_params(axis="both", labelsize=8)
     ax.grid(True, alpha=0.3)
     ax.text(0.44, 0.95, "NIO", transform=ax.transAxes, fontsize=9, fontweight="bold", va="top")
 
     ax_j = ax.twinx()
-    ax_j.axhline(j_high, color="red", ls="--", lw=1.5, label=r"$j_{\rm acc} = j_{\rm max}$")
-    ax_j.axhline(j_low, color="blue", ls="--", lw=1.5, label=r"$j_{\rm acc} = j_{\rm max}/10$")
+    ax_j.axhline(j_high, color="blue", ls="--", lw=1.5, label=r"$j_{\rm acc} = j_{\rm max}$")
+    ax_j.axhline(j_low, color="red", ls="--", lw=1.5, label=r"$j_{\rm acc} = j_{\rm max}/10$")
     ax_j.set_ylabel(r"$j_{\rm acc}$ (kpc km s$^{-1}$)", fontsize=9)
     ax_j.set_ylim(0, j_high * 1.3)
     ax_j.tick_params(axis="y", labelsize=8)
 
     l1, lab1 = ax.get_legend_handles_labels()
     l2, lab2 = ax_j.get_legend_handles_labels()
-    ax.legend(l1 + l2, lab1 + lab2, loc="center left", fontsize=6.5, framealpha=0.9)
+    ax_j.legend(l1 + l2, lab1 + lab2, loc="center left", fontsize=6.5, framealpha=1.0)
 
     ax = axes[0, 1]
-    ax.plot(times_nio, nio_high["f_gas_t"], "r-", lw=1.5, label=r"$f_{\rm gas}$ (high $j_{\rm acc}$)")
-    ax.plot(times_nio, nio_low["f_gas_t"], "b-", lw=1.5, label=r"$f_{\rm gas}$ (low $j_{\rm acc}$)")
+    ax.plot(times_nio, nio_high["f_gas_t"], "b-", lw=1.5, label=r"$f_{\rm gas}$ (high $j_{\rm acc}$)")
+    ax.plot(times_nio, nio_low["f_gas_t"], "r-", lw=1.5, label=r"$f_{\rm gas}$ (low $j_{\rm acc}$)")
     ax.set_ylabel(r"$f_{\rm gas}$", fontsize=9)
     ax.set_xlim(0.1, 12)
     ax.set_ylim(0, 1.05)
@@ -619,14 +664,14 @@ def plot_combined(nio_high, nio_low, io_pos, io_neg):
     ax.grid(True, alpha=0.3)
 
     ax_jbar = ax.twinx()
-    ax_jbar.plot(times_nio, nio_high["j_bar_t"], "r--", lw=1.2, label=r"$j_{\rm bar}$ (high $j_{\rm acc}$)")
-    ax_jbar.plot(times_nio, nio_low["j_bar_t"], "b--", lw=1.2, label=r"$j_{\rm bar}$ (low $j_{\rm acc}$)")
+    ax_jbar.plot(times_nio, nio_high["j_bar_t"], "b--", lw=1.2, label=r"$j_{\rm bar}$ (high $j_{\rm acc}$)")
+    ax_jbar.plot(times_nio, nio_low["j_bar_t"], "r--", lw=1.2, label=r"$j_{\rm bar}$ (low $j_{\rm acc}$)")
     ax_jbar.set_ylabel(r"$j_{\rm bar}$ (kpc km s$^{-1}$)", fontsize=9)
     ax_jbar.tick_params(axis="y", labelsize=8)
 
     l1, lab1 = ax.get_legend_handles_labels()
     l2, lab2 = ax_jbar.get_legend_handles_labels()
-    ax.legend(l1 + l2, lab1 + lab2, loc="center right", fontsize=6.5, framealpha=0.9)
+    ax_jbar.legend(l1 + l2, lab1 + lab2, loc="center right", fontsize=6.5, framealpha=1.0)
 
     times_io = io_pos["times"]
     j_acc_t = io_pos["j_acc_t"]
@@ -643,9 +688,9 @@ def plot_combined(nio_high, nio_low, io_pos, io_neg):
     lbl_n = rf"{frac_n.numerator}/{frac_n.denominator}"
 
     ax = axes[1, 0]
-    ax.plot(times_io, M_dot_pos, "b--", lw=1.2,
+    ax.plot(times_io, M_dot_pos, "r--", lw=1.2,
             label=rf"$\dot{{M}}_{{\rm acc}}$ ($\omega={lbl_p}$ Gyr$^{{-1}}$)")
-    ax.plot(times_io, M_dot_neg, "r--", lw=1.2,
+    ax.plot(times_io, M_dot_neg, "b--", lw=1.2,
             label=rf"$\dot{{M}}_{{\rm acc}}$ ($\omega={lbl_n}$ Gyr$^{{-1}}$)")
     ax.set_xlabel("Time (Gyr)", fontsize=8)
     ax.set_ylabel(r"$\dot{M}_{\rm acc}$ ($M_\odot\,{\rm Gyr}^{-1}$)", fontsize=9)
@@ -658,16 +703,17 @@ def plot_combined(nio_high, nio_low, io_pos, io_neg):
     ax_m = ax.twinx()
     ax_m.plot(times_io, j_acc_t, "k-", lw=1.5, label=r"$j_{\rm acc}(t)$")
     ax_m.set_ylabel(r"$j_{\rm acc}$ (kpc km s$^{-1}$)", fontsize=9)
+    ax_m.set_ylim(0, float(np.max(j_acc_t)) * 1.8)      # headroom so j_acc doesn't overlap M_dot(-omega)
     ax_m.tick_params(axis="y", labelsize=8)
 
     l1, lab1 = ax.get_legend_handles_labels()
     l2, lab2 = ax_m.get_legend_handles_labels()
-    ax.legend(l1 + l2, lab1 + lab2, loc="lower center", fontsize=6.5, framealpha=0.9)
+    ax_m.legend(l1 + l2, lab1 + lab2, loc="center left", fontsize=6.5, framealpha=1.0)
 
     ax = axes[1, 1]
-    ax.plot(times_io, io_pos["f_gas_t"], "b-", lw=1.5,
+    ax.plot(times_io, io_pos["f_gas_t"], "r-", lw=1.5,
             label=rf"$f_{{\rm gas}}$ ($\omega={lbl_p}$ Gyr$^{{-1}}$)")
-    ax.plot(times_io, io_neg["f_gas_t"], "r-", lw=1.5,
+    ax.plot(times_io, io_neg["f_gas_t"], "b-", lw=1.5,
             label=rf"$f_{{\rm gas}}$ ($\omega={lbl_n}$ Gyr$^{{-1}}$)")
     ax.set_xlabel("Time (Gyr)", fontsize=8)
     ax.set_ylabel(r"$f_{\rm gas}$", fontsize=9)
@@ -677,16 +723,16 @@ def plot_combined(nio_high, nio_low, io_pos, io_neg):
     ax.grid(True, alpha=0.3)
 
     ax_jbar = ax.twinx()
-    ax_jbar.plot(times_io, io_pos["j_bar_t"], "b--", lw=1.2,
+    ax_jbar.plot(times_io, io_pos["j_bar_t"], "r--", lw=1.2,
                  label=rf"$j_{{\rm bar}}$ ($\omega={lbl_p}$ Gyr$^{{-1}}$)")
-    ax_jbar.plot(times_io, io_neg["j_bar_t"], "r--", lw=1.2,
+    ax_jbar.plot(times_io, io_neg["j_bar_t"], "b--", lw=1.2,
                  label=rf"$j_{{\rm bar}}$ ($\omega={lbl_n}$ Gyr$^{{-1}}$)")
     ax_jbar.set_ylabel(r"$j_{\rm bar}$ (kpc km s$^{-1}$)", fontsize=9)
     ax_jbar.tick_params(axis="y", labelsize=8)
 
     l1, lab1 = ax.get_legend_handles_labels()
     l2, lab2 = ax_jbar.get_legend_handles_labels()
-    ax.legend(l1 + l2, lab1 + lab2, loc="lower center", fontsize=6.5, framealpha=0.9)
+    ax_jbar.legend(l1 + l2, lab1 + lab2, loc="center right", fontsize=6.5, framealpha=1.0)
 
     axes[0, 0].set_title("Assumptions", fontsize=9)
     axes[0, 1].set_title("Results", fontsize=9)
@@ -753,29 +799,22 @@ def run_evolution(galaxies, paths):
             _save(fig, out / f"{gal}_time_evolution_nio.png")
 
 
-def run_mosaic(bins, paths):
+def run_mosaic(bins, paths, n, k, a, b, sfl, n_j):
     out = paths["mosaic_out"]
     out.mkdir(parents=True, exist_ok=True)
-    fig = plot_mosaic(bins, paths)
-    fig.savefig(out / "jbar_vs_fgas_mosaic_comparison.png", dpi=300, bbox_inches="tight")
+    fig = plot_mosaic(bins, paths, n, k, a, b, sfl, n_j)
+    fig.savefig(out / "jbar_vs_fgas_mosaic_comparison.pdf", dpi=300, bbox_inches="tight")
     plt.close(fig)
-    print(f"[compare_profiles] wrote {out / 'jbar_vs_fgas_mosaic_comparison.png'}")
+    print(f"[compare_profiles] wrote {out / 'jbar_vs_fgas_mosaic_comparison.pdf'}")
 
 
-def run_comparison(paths):
+def run_comparison(paths, n, k, a, b, sfl, logM=10.0):
     out = paths["comp_out"]
     out.mkdir(parents=True, exist_ok=True)
-    missing = [n for n, fp in [
-        ("comparison_nio_high_jacc.npz", paths["nio_prof"] / "comparison_nio_high_jacc.npz"),
-        ("comparison_nio_low_jacc.npz", paths["nio_prof"] / "comparison_nio_low_jacc.npz"),
-        ("comparison_io_pos_omega.npz", paths["io_prof"] / "comparison_io_pos_omega.npz"),
-        ("comparison_io_neg_omega.npz", paths["io_prof"] / "comparison_io_neg_omega.npz"),
-    ] if not fp.exists()]
-    if missing:
-        print("[compare_profiles] comparison npz missing (run save_comparison_npz.py): "
-              + ", ".join(missing))
-        return
-    nio_high, nio_low, io_pos, io_neg = _load_comparison(paths)
+    print(f"[compare_profiles] comparison at logM={logM:.1f}: IO (n={n}, k={k}), "
+          f"NIO power-law (a={a}, b={b})")
+    io_pos, io_neg = _comparison_io_live(logM, n, k, sfl)
+    nio_high, nio_low = _comparison_nio_live(logM, a, b, sfl)
     _save(plot_nio_2panel(nio_high, nio_low),
           out / "comparison_nio_assumptions_vs_results.pdf", dpi=300)
     _save(plot_io_2panel(io_pos, io_neg),
@@ -804,20 +843,37 @@ def main():
     p.add_argument("--galaxies", nargs="+", default=DEFAULT_GALAXIES)
     p.add_argument("--bins", nargs="+", default=None,
                    help="mass bins as logM_low,logM_high pairs (e.g. --bins 9.0,9.5 9.7,10.3)")
+    p.add_argument("--io-params", type=float, nargs=2, default=None, metavar=("n", "k"),
+                   help="IO (n, k) for the mosaic/comparison (run live)")
+    p.add_argument("--nio-params", type=float, nargs=2, default=None, metavar=("a", "b"),
+                   help="NIO power-law (a, b) for the mosaic/comparison: omega = a*(Mbar/1e10)**b")
+    p.add_argument("--sfl", default=None, help="star-formation law (default: config sfl.default)")
+    p.add_argument("--n-j", type=int, default=None, help="NIO j_acc sweep points (default: config)")
+    p.add_argument("--comparison-logM", type=float, default=10.0,
+                   help="single-galaxy mass for the comparison figures")
     p.add_argument("--config", type=Path, default=None)
     args = p.parse_args()
 
+    cfg = load_config(args.config)
     paths = _paths(args.config)
     bins = _parse_bins(args.bins)
+    sfl = args.sfl or cfg["sfl"]["default"]
+    n_j = args.n_j or cfg["integration"]["n_j"]
 
     if args.figure in ("profiles", "all"):
         run_profiles(args.galaxies, paths)
     if args.figure in ("evolution", "all"):
         run_evolution(args.galaxies, paths)
     if args.figure in ("mosaic", "all"):
-        run_mosaic(bins, paths)
+        if args.io_params is None or args.nio_params is None:
+            raise SystemExit("mosaic needs --io-params n k and --nio-params a b")
+        run_mosaic(bins, paths, args.io_params[0], args.io_params[1],
+                   args.nio_params[0], args.nio_params[1], sfl, n_j)
     if args.figure in ("comparison", "all"):
-        run_comparison(paths)
+        if args.io_params is None or args.nio_params is None:
+            raise SystemExit("comparison needs --io-params n k and --nio-params a b")
+        run_comparison(paths, args.io_params[0], args.io_params[1],
+                       args.nio_params[0], args.nio_params[1], sfl, args.comparison_logM)
 
 
 if __name__ == "__main__":

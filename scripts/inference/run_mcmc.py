@@ -26,9 +26,13 @@ def main():
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--model", choices=["io", "nio"], required=True)
     p.add_argument("--likelihood", choices=["4obs", "fgas", "a0"], required=True)
-    p.add_argument("--sample", choices=["mcmc-obs", "full-hix"], default="mcmc-obs")
+    p.add_argument("--sample", choices=["mcmc-obs", "converged", "MP_full", "full-hix", "full"],
+                   default="mcmc-obs")
     p.add_argument("--nwalkers", type=int, default=32)
     p.add_argument("--nsteps", type=int, default=200)
+    p.add_argument("--init", choices=["gaussian", "uniform"], default="gaussian",
+                   help="gaussian: a small ball around the config init; "
+                        "uniform: flat over the whole prior box (walkers maximally spread)")
     p.add_argument("--max-workers", type=int, default=12)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--resume", action="store_true")
@@ -45,10 +49,17 @@ def main():
         raise SystemExit(str(e))
 
     rng = np.random.default_rng(args.seed)
-    pos = np.asarray(init) + 0.1 * rng.standard_normal((args.nwalkers, ndim))
-    for d in range(ndim):
-        lo, hi = bounds[d]
-        pos[:, d] = np.clip(pos[:, d], lo + 0.01, hi - 0.01)
+    if args.init == "uniform":                       # walkers flat across the whole prior box
+        pos = np.empty((args.nwalkers, ndim))
+        for d in range(ndim):
+            lo, hi = bounds[d]
+            eps = 1e-3 * (hi - lo)                    # keep off the strict prior edges
+            pos[:, d] = rng.uniform(lo + eps, hi - eps, args.nwalkers)
+    else:                                            # gaussian ball around the config init
+        pos = np.asarray(init) + 0.1 * rng.standard_normal((args.nwalkers, ndim))
+        for d in range(ndim):
+            lo, hi = bounds[d]
+            pos[:, d] = np.clip(pos[:, d], lo + 0.01, hi - 0.01)
 
     out = args.out or (ROOT / cfg["paths"]["mcmc_chains"]
                        / f"chain_{args.model}_{args.likelihood}_{args.sample}.h5")

@@ -26,3 +26,9 @@ rplots/
 .github
 
 MIGRATION_PLAN.md
+
+tests/
+
+CLAUDE.md
+
+.gitignore

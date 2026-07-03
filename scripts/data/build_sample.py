@@ -1,9 +1,14 @@
-"""Build the observed galaxy sample tables.
+"""Build the observed galaxy samples and cache each to data/sample_<name>.csv.
 
---sample converged : the 77-galaxy corrected sample -> data/common_sample.csv,
-                     plus the CONVERGED+HIX 4-observable table -> data/mcmc_observables.csv
---sample full      : all baryons galaxies (corrected where gas+stars exist, else raw)
-                     -> data/full_sample.csv  (add --with-hix to append the HIX galaxies)
+Samples:
+  converged : 77 galaxies in baryons ∩ gas ∩ stars (corrected); also writes
+              mcmc-obs (converged + HIX, the 4-observable table)
+  MP_full   : the full MP+21 baryonic sample (--with-hix also writes full-hix = MP_full + HIX)
+  full      : MP_full + HIX + extra compilations (UDGs/GLSBs/Dwarfs), errors imputed,
+              baryonic columns only  (for the f_gas likelihood)
+  all       : every sample above
+
+The grid / MCMC scripts read these CSVs by sample name.
 """
 
 import argparse
@@ -14,35 +19,37 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from jmfgas.config import load_config
-from jmfgas.data import build_converged, build_full, build_mcmc_observables
+from jmfgas.data import sample_frame
+
+
+def _save(name, data_dir):
+    df = sample_frame(name, data_dir)
+    out = data_dir / f"sample_{name}.csv"
+    df.to_csv(out, index=False)
+    print(f"{name:10s}: {len(df):4d} galaxies -> {out}")
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--sample", choices=["converged", "full"], default="converged")
+    p.add_argument("--sample", choices=["converged", "MP_full", "full", "all"], default="all")
     p.add_argument("--with-hix", action="store_true",
-                   help="append HIX galaxies (full sample only)")
+                   help="also write full-hix (MP_full + HIX); implied by --sample all")
     p.add_argument("--config", type=Path, default=None)
     args = p.parse_args()
 
     data_dir = ROOT / load_config(args.config)["paths"]["data"]
-
-    if args.sample == "converged":
-        conv = build_converged(data_dir)
-        out = data_dir / "common_sample.csv"
-        conv.to_csv(out, index=False)
-        print(f"converged: {len(conv)} galaxies -> wrote {out}")
-        mcmc = build_mcmc_observables(data_dir)
-        out2 = data_dir / "mcmc_observables.csv"
-        mcmc.to_csv(out2, index=False)
-        print(f"converged+HIX: {len(mcmc)} galaxies -> wrote {out2}")
-    else:
-        full = build_full(data_dir, with_hix=args.with_hix)
-        name = "full_sample_hix.csv" if args.with_hix else "full_sample.csv"
-        out = data_dir / name
-        full.to_csv(out, index=False)
-        print(f"full{'+HIX' if args.with_hix else ''}: {len(full)} galaxies -> wrote {out}")
+    s = args.sample
+    if s in ("converged", "all"):
+        _save("converged", data_dir)
+        _save("mcmc-obs", data_dir)
+    if s in ("MP_full", "all"):
+        _save("MP_full", data_dir)
+        if args.with_hix or s == "all":
+            _save("full-hix", data_dir)
+    if s in ("full", "all"):
+        _save("full", data_dir)
+    return 0
 
 
 if __name__ == "__main__":

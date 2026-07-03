@@ -28,10 +28,16 @@ def main():
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--model", choices=["io", "nio"], required=True)
     p.add_argument("--likelihood", choices=["4obs", "fgas"], required=True)
-    p.add_argument("--sample", choices=["mcmc-obs", "full-hix", "converged"], default="mcmc-obs")
+    p.add_argument("--sample", choices=["mcmc-obs", "full-hix", "converged", "MP_full", "full"],
+                   default="mcmc-obs")
     p.add_argument("--mass-min", type=float, default=None, help="logMbar lower cut (converged sample)")
     p.add_argument("--mass-max", type=float, default=None, help="logMbar upper cut (converged sample)")
     p.add_argument("--exclude-hix", action="store_true", help="drop HIX galaxies (converged sample)")
+    p.add_argument("--bounds", type=float, nargs=4, default=None,
+                   metavar=("N_LO", "N_HI", "K_LO", "K_HI"),
+                   help="fix the grid box instead of the prior (for a zoomed scan)")
+    p.add_argument("--ref-grid", type=Path, default=None,
+                   help="another grid .npz; store its peak_logL as ref_logL (shared normalization)")
     p.add_argument("--coarse-n", type=int, default=None)
     p.add_argument("--max-levels", type=int, default=None)
     p.add_argument("--target-spacing", type=float, default=None)
@@ -57,6 +63,10 @@ def main():
     if ndim != 2:
         raise SystemExit(f"grid inference is 2-D; {args.model}/{args.likelihood} is "
                          f"{ndim}-D. Use run_mcmc.py instead.")
+    if args.bounds is not None:                 # fixed zoom box overrides the prior bounds
+        bounds = [(args.bounds[0], args.bounds[1]), (args.bounds[2], args.bounds[3])]
+    ref_logL = (float(np.load(args.ref_grid, allow_pickle=True)["peak_logL"])
+                if args.ref_grid is not None else np.nan)
 
     pick = lambda v, d: d if v is None else v   # 0.0 is a valid override, don't fall through
     res = adaptive_grid(
@@ -79,6 +89,8 @@ def main():
         sample_tag += f"_M{args.mass_min}-{args.mass_max}"
     if args.exclude_hix:
         sample_tag += "_noHIX"
+    if args.bounds is not None:
+        sample_tag += "_zoom"
     out = args.out or (ROOT / cfg["paths"]["grids"]
                        / f"grid_{args.model}_{args.likelihood}_{sample_tag}.npz")
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -92,7 +104,7 @@ def main():
              labels=np.array(labels), model=args.model, likelihood=args.likelihood,
              sample=args.sample, stop_reason=res["stop_reason"],
              n_components=res["n_components"], peak=np.array(res["peak"]),
-             peak_logL=res["peak_logL"], n_levels=len(res["levels"]),
+             peak_logL=res["peak_logL"], ref_logL=ref_logL, n_levels=len(res["levels"]),
              **per_level)
     print(f"wrote {out}")
 

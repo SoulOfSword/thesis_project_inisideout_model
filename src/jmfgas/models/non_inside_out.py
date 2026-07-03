@@ -18,9 +18,9 @@ from .common import (M_times1_jax, N_T as n_t, T_END as t_end, DT as dt,
 
 
 @jax.jit
-def omega_Mdep(logM, a, b):
-    """Accretion rate omega(M_bar) = a*(logM - 10) + b  [Gyr^-1]."""
-    return a * (logM - 10.0) + b
+def omega_Mdep(logM, a=0.1, b=0.5):
+    """Accretion rate omega(M_bar) = a*(Mbar/10^10 Msun)^b."""
+    return a*(((10**logM)/1e10)**b)  # a * (logM - 10.0) + b
 
 
 @jax.jit
@@ -144,10 +144,13 @@ def run_all_masses_Mdep_omega_jax(log_M_array, a, b, r_acc_grid_pc,
 
 
 def build_r_acc_for_single_M(logM, n_j=10):
-    """Accretion radii [pc] sampled over the j_acc range for one mass."""
+    """Accretion radii [pc] over the j_acc range [j_max/10, 2 j_max] for one mass.
+
+    Top is 2 j_max so the NIO band spans the same j range as the inside-out model with
+    k=2 (whose j_bar ceiling is k j_max)."""
     Mbar = 10.0**logM
     j_max = j_maxer(Mbar)
-    j_acc_array = np.linspace(j_max / 10.0, j_max, n_j)
+    j_acc_array = np.linspace(j_max / 10.0, 2.0 * j_max, n_j)
     r_acc_pc = r_btfr_def(Mbar, j_acc_array)
     return r_acc_pc, j_acc_array
 

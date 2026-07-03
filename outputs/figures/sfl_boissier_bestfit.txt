@@ -1,0 +1,9 @@
+Pearson r: 0.836846; p-value: 0.000000 
+Spearman rho: 0.888431; p-value: 0.000000 
+Kendall tau: 0.699957; p-value: 0.000000 
+Maximum likelihood (ML) value: 117.7
+Slope (ML, median, upper error, lower error): 2.131; 2.142; +0.09734, -0.08834
+Intercept (ML, median, upper error, lower error): -3.233; -3.243; +0.08337; -0.09048
+Intrinsic scatter (ML, median, upper error, lower error): 0.1372; 0.1387; +0.007738; -0.007369
+ML rms observed scatter (vertical): 0.3799
+ML rms observed scatter (orthogonal): 0.1613

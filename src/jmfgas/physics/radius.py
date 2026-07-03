@@ -15,17 +15,17 @@ _rv_cache = {}
 
 
 def _rv_params():
-    """Lazily load and cache (alpha, beta) of the R_v-v_flat power law (kpc)."""
+    """Lazily load and cache (gamma, delta) of the R_v-v_flat relation (kpc, v_flat/100)."""
     if "p" not in _rv_cache:
         rel = load_rv_relation()
-        _rv_cache["p"] = (rel["alpha"], rel["beta"])
+        _rv_cache["p"] = (rel["gamma"], rel["delta"])
     return _rv_cache["p"]
 
 
 def rv_def(M_bar):
-    """Disc scale radius R_v [pc] from the fitted power law (divide by 1000 for kpc)."""
-    alpha, beta = _rv_params()
-    return (10.0**alpha * v_btfr_def(M_bar) ** beta) * 1000.0
+    """Disc scale radius R_v [pc] from the fitted relation (divide by 1000 for kpc)."""
+    gamma, delta = _rv_params()
+    return (10.0**delta * (v_btfr_def(M_bar) / 100.0) ** gamma) * 1000.0
 
 
 def analytical_r(x, c, y):

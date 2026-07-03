@@ -30,9 +30,12 @@ def build_r_acc_matrix_for_all_M(ns, ks):
 
 
 @jax.jit
-def build_r_acc_matrix_for_all_M_jax(ns, ks):
-    """JAX r_acc(M_bar, t) [pc] on the mass and time grids."""
-    Mbar = 10.0 ** log_M_bar_array_jax
+def build_r_acc_matrix_for_all_M_jax(ns, ks, log_M_bar_arr=log_M_bar_array_jax):
+    """JAX r_acc(M_bar, t) [pc] on a mass grid (default: the config grid) and the time grid.
+
+    Pass log_M_bar_arr to build r_acc on a custom mass grid (e.g. extended past the config
+    cap so the massive end isn't snapped to the edge bin); default callers are unaffected."""
+    Mbar = 10.0 ** jnp.asarray(log_M_bar_arr, dtype=jnp.float64)
 
     def per_mass(Mbar_val):
         j_acc = j_acc_def(j_maxer(Mbar_val), M_times1_jax, n=ns, con=ks)
@@ -215,25 +218,45 @@ def fgas_and_jbar_for_galaxies_jax(Mbar_array, t_acc_array, star_formation_law,
 
 
 # --- omega inversion (j_bar -> omega) for the inside-out likelihood ---
-x_grid_jax = jnp.linspace(0.0, 1.0, 256, dtype=jnp.float64)
-dx_x = x_grid_jax[1] - x_grid_jax[0]
+# F(omega) = A(z, n) / B(z) with z = omega*t0; A(z,n) = int_0^1 x^n e^{-z x} dx,
+# B(z) = int_0^1 e^{-z x} dx. A is summed as a strictly-positive Taylor series (no
+# cancellation), B is closed-form. Both are machine-precise for the |z| the inversion needs.
+
+
+@partial(jax.jit, static_argnames=("K",))
+def A_integral(z, n, K=256):
+    """A(z) = int_0^1 x^n e^{-z x} dx as a positive-term Taylor series.
+
+    z >= 0:  e^{-z} sum_k z^k / (n+1)_{k+1}        z < 0:  sum_k (-z)^k / (k! (n+1+k)).
+    Each branch sums strictly positive terms, so both reach ~machine precision; the off-branch
+    is fed 0 to stay finite. K=256 gives ~1e-16 truncation out to |z|~150 (omega-cap is |z|=120).
+    """
+    z = jnp.asarray(z, dtype=jnp.float64)
+    n = jnp.asarray(n, dtype=jnp.float64)
+    k = jnp.arange(1, K, dtype=jnp.float64)
+    ones = jnp.ones(jnp.shape(z) + (1,), dtype=jnp.float64)
+    zp = jnp.where(z >= 0.0, z, 0.0)
+    cp = jnp.cumprod(zp[..., None] / (n + 1.0 + k), axis=-1)
+    A_pos = jnp.exp(-zp) * jnp.sum(jnp.concatenate([ones, cp], axis=-1), axis=-1) / (n + 1.0)
+    s = jnp.where(z < 0.0, -z, 0.0)
+    cn = jnp.cumprod((s[..., None] / k) * (n + k) / (n + 1.0 + k), axis=-1)
+    A_neg = jnp.sum(jnp.concatenate([ones, cn], axis=-1), axis=-1) / (n + 1.0)
+    return jnp.where(z >= 0.0, A_pos, A_neg)
 
 
 @jax.jit
-def incomplete_gamma_integral_jax(omega, n, t0, upper_limit=1.0):
-    omega = jnp.asarray(omega)
-    x = x_grid_jax[None, :] * upper_limit
-    dx = dx_x * upper_limit
-    integrand = (x**n) * jnp.exp(-omega[..., None] * (t0 * x))
-    return simpson_uniform_jax(integrand, dx, axis=-1)
+def B_integral(z):
+    """B(z) = int_0^1 e^{-z x} dx = (1 - e^{-z})/z, exact; B(0)=1."""
+    z = jnp.asarray(z, dtype=jnp.float64)
+    safe = jnp.where(z == 0.0, 1.0, z)
+    return jnp.where(z == 0.0, jnp.ones_like(safe), -jnp.expm1(-z) / safe)
 
 
-@jax.jit
-def F_omega_jax(omega, n, t0):
-    """Dimensionless F(omega) = int x^n e^{-w t0 x} / int e^{-w t0 x} on [0,1]."""
-    num = incomplete_gamma_integral_jax(omega, n, t0, upper_limit=1.0)
-    den = incomplete_gamma_integral_jax(omega, 0.0, t0, upper_limit=1.0)
-    return num / den
+@partial(jax.jit, static_argnames=("K",))
+def F_omega_jax(omega, n, t0, K=256):
+    """Dimensionless F(omega) = A(omega t0, n) / B(omega t0) on [0,1]."""
+    z = jnp.asarray(omega, dtype=jnp.float64) * t0
+    return A_integral(z, n, K) / B_integral(z)
 
 
 @jax.jit

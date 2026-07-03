@@ -3,8 +3,8 @@
 Inverts each observed galaxy's j_bar for its omega, prints solve statistics and the
 per-mass-bin medians, and draws the omega distribution (plain + stacked by mass bin).
 
-  python scripts/plots/omega_histogram.py --grid outputs/grids/grid_io_4obs_grid-obs.npz
-  python scripts/plots/omega_histogram.py --params 0.51 2.17
+  python scripts/plots/omega_histogram.py --grid outputs/grids/grid_io_fgas_full.npz
+  python scripts/plots/omega_histogram.py --params 0.51 2.17 --sample full
 """
 
 import argparse
@@ -23,8 +23,6 @@ from jmfgas.config import load_config
 from jmfgas.inference.build import obs_table
 from jmfgas.inference.omega import omega_per_galaxy
 
-_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
-
 
 def main():
     p = argparse.ArgumentParser(description=__doc__,
@@ -32,7 +30,7 @@ def main():
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--grid", type=Path, help="grid .npz; uses its peak (n, k)")
     src.add_argument("--params", type=float, nargs=2, metavar=("n", "k"))
-    p.add_argument("--sample", default="mcmc-obs")
+    p.add_argument("--sample", default="full", help="sample name (default: full = all galaxies)")
     p.add_argument("--t0", type=float, default=None)
     p.add_argument("--out", type=Path, default=None)
     p.add_argument("--config", type=Path, default=None)
@@ -66,7 +64,8 @@ def main():
         print(f"omega > 10           : {(omega[mask] > 10).sum()}  ({(omega[mask] > 10).mean():.3f})")
     print(f"y range              : [{np.nanmin(y):.4g}, {np.nanmax(y):.4g}]")
 
-    mass_bins = np.arange(8, 12, 0.5)
+    lo, hi = np.floor(2 * np.nanmin(logM)) / 2, np.ceil(2 * np.nanmax(logM)) / 2
+    mass_bins = np.arange(lo, hi + 0.5, 0.5)        # 0.5-dex bins spanning the whole sample
     omega_capped = np.clip(omega, None, 10.0)
     by_mass, labels = [], []
     print("\nomega by mass bin (capped at 10):")
@@ -89,7 +88,8 @@ def main():
     ax0.grid(alpha=0.3)
 
     edges = np.linspace(omega_capped.min() - 0.5, omega_capped.max() + 0.5, 50)
-    ax1.hist(by_mass, bins=edges, stacked=True, color=_COLORS[:len(by_mass)],
+    colors = plt.cm.turbo(np.linspace(0.05, 0.95, len(by_mass)))
+    ax1.hist(by_mass, bins=edges, stacked=True, color=colors,
              label=labels, edgecolor="white", lw=0.5)
     ax1.set_xlabel(r"$\omega_{\rm acc}$ (Gyr$^{-1}$)"); ax1.set_ylabel("count")
     ax1.set_title("by mass bin")

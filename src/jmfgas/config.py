@@ -8,6 +8,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 _CONFIG = ROOT / "config" / "model.yaml"
 _RV_RELATION = ROOT / "data" / "rv_vflat_relation.json"
+_SFL_RELATIONS = ROOT / "data" / "sfl_relations.json"
 
 
 def load_config(path=None):
@@ -18,7 +19,7 @@ def load_config(path=None):
 
 
 def load_rv_relation(path=None):
-    """Read the fitted R_v-v_flat relation (slope, intercept) written by fit_rv_vflat.
+    """Read the fitted R_v-v_flat relation (gamma, delta) written by fit_rv_vflat.
 
     R_v is returned in pc by the radius helpers; this just holds the line coefficients.
     """
@@ -26,6 +27,17 @@ def load_rv_relation(path=None):
     if not p.exists():
         raise FileNotFoundError(
             f"{p} not found - run scripts/data/fit_rv_vflat.py first."
+        )
+    with open(p) as f:
+        return json.load(f)
+
+
+def load_sfl_relations(path=None):
+    """Read the fitted star-formation-law coefficients written by fit_sfl.py."""
+    p = Path(path) if path is not None else _SFL_RELATIONS
+    if not p.exists():
+        raise FileNotFoundError(
+            f"{p} not found - run scripts/data/fit_sfl.py first."
         )
     with open(p) as f:
         return json.load(f)

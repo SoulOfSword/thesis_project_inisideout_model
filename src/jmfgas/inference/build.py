@@ -1,40 +1,39 @@
 """Assemble the observable table and the log-probability for a (model, likelihood)."""
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import jax.numpy as jnp
 
 from ..config import load_config
-from ..data import build_mcmc_observables, build_full, build_converged
+from ..data import sample_frame
 from ..models.common import log_M_bar_array_jax
 from .likelihoods import (LogProbabilityEmcee, LogProbabilityEmcee4Obs,
                           NIOPosterior4Obs, NIOPosteriorA0, NIOPosteriorFgas)
 
 
 def obs_table(sample, data_dir, mass_range=None, exclude_hix=False):
-    """Observable arrays for a sample. mass_range=(lo, hi) on logMbar and exclude_hix
-    apply to the 'converged' sample only (the one carrying Name and Mbar)."""
-    if sample == "converged":
-        df = build_converged(data_dir)
-        if mass_range is not None or exclude_hix:
-            logM = np.log10(df["Mbar"].to_numpy(float))
-            keep = np.ones(len(df), bool)
-            if mass_range is not None:
-                keep &= (logM >= mass_range[0]) & (logM < mass_range[1])
-            if exclude_hix:
-                hix = set(pd.read_csv(data_dir / "compilation_AM_others" / "HIX.csv")["Name"])
-                keep &= ~df["Name"].isin(hix).to_numpy()
-            df = df[keep].reset_index(drop=True)
-        out = {c: df[c].to_numpy(float) for c in df.columns if c != "Name"}
-        out["logMbar"] = np.log10(df["Mbar"].to_numpy(float))
-        return out
-    if sample == "full-hix":
-        df = build_full(data_dir, with_hix=True)
-        out = {c: df[c].values.astype(float) for c in df.columns if c != "Name"}
-        out["logMbar"] = np.log10(df["Mbar"].values.astype(float))
-        return out
-    df = build_mcmc_observables(data_dir)
-    return {c: df[c].values.astype(float) for c in df.columns}
+    """Observable arrays for a sample, from its cached CSV (data/sample_<name>.csv,
+    written by build_sample.py) or built on the fly if that's missing. mass_range=(lo, hi)
+    on logMbar and exclude_hix need the Name + Mbar columns (converged / full samples)."""
+    csv = Path(data_dir) / f"sample_{sample}.csv"
+    df = pd.read_csv(csv) if csv.exists() else sample_frame(sample, data_dir)
+    if mass_range is not None or exclude_hix:
+        if "Mbar" not in df.columns:
+            raise ValueError(f"sample {sample!r} has no Mbar/Name columns for mass/HIX cuts")
+        logM = np.log10(df["Mbar"].to_numpy(float))
+        keep = np.ones(len(df), bool)
+        if mass_range is not None:
+            keep &= (logM >= mass_range[0]) & (logM < mass_range[1])
+        if exclude_hix:
+            hix = set(pd.read_csv(data_dir / "compilation_AM_others" / "HIX.csv")["Name"])
+            keep &= ~df["Name"].isin(hix).to_numpy()
+        df = df[keep].reset_index(drop=True)
+    out = {c: df[c].to_numpy(float) for c in df.columns if c not in ("Name", "group")}
+    if "logMbar" not in out and "Mbar" in out:
+        out["logMbar"] = np.log10(out["Mbar"])
+    return out
 
 
 def build_log_prob(model, likelihood, sample, cfg, data_dir,
@@ -43,9 +42,9 @@ def build_log_prob(model, likelihood, sample, cfg, data_dir,
 
     bounds is a list of (lo, hi) per free parameter.
     """
-    if sample == "full-hix" and likelihood in ("4obs", "a0"):
-        raise ValueError("full-hix sample only carries f_gas columns; "
-                         "use --likelihood fgas (4obs/a0 need the CONVERGED+HIX sample)")
+    if likelihood in ("4obs", "a0") and sample in ("full-hix", "MP_full", "full"):
+        raise ValueError(f"the {sample!r} sample carries only baryonic columns; use "
+                         "--likelihood fgas (4obs/a0 need the converged or mcmc-obs sample)")
     t = obs_table(sample, data_dir, mass_range, exclude_hix)
     jx = lambda c: jnp.asarray(t[c], dtype=jnp.float64)
 

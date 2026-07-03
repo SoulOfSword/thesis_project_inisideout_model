@@ -46,9 +46,11 @@ For tests / interactive use you may `pip install -e .`.
 
 - **Config, not constants.** Anything tunable (t0, mass/time grids, prior bounds,
   SFL name, R_v and BTFR coefficients) is a CLI argument or a `config/model.yaml`
-  value. The only inline hardcoded numbers allowed are the star-formation-law
-  coefficient tables in `physics/sfl.py`. `Rf` and the SFL threshold live in the
-  config; the R_v-v_flat power law (R_v = 10**alpha * v_flat**beta) is read from
+  value. The fitted star-formation-law coefficients (boissier, new_ksl, old_ksl and
+  the cutoff threshold) are read from `data/sfl_relations.json` (written by
+  `scripts/data/fit_sfl.py`); the alternative literature laws (kennicutt_modern,
+  elise_steep) stay as inline constants in `physics/sfl.py`. `Rf` lives in the config;
+  the R_v-v_flat power law (R_v = 10**delta * (v_flat/100)**gamma) is read from
   `data/rv_vflat_relation.json` (written by `scripts/data/fit_rv_vflat.py`).
 - **Radii are in pc** by default in the model engine; divide by 1000 for the rare
   kpc consumer.

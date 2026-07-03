@@ -2,7 +2,8 @@
 
 Fits each SPARC rotation curve with an exponential-disc (Boissier) form to get
 R_v, pairs it with the published V_flat, drops poorly-constrained galaxies, and
-fits R_v = intercept + slope * V_flat with ODR. Writes the line to
+fits log R_v = gamma * log(v_flat/100) + delta with the Bayesian line fitter
+(orthogonal intrinsic scatter). Writes the relation to
 data/rv_vflat_relation.json (used by the model's rv_def).
 """
 
@@ -15,12 +16,13 @@ from warnings import catch_warnings, simplefilter
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
-from scipy import odr
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 from jmfgas.config import load_config
+from BayesLineFit_mod import BayesLineFit
 
 
 def tanh(x, vf, rv):
@@ -108,10 +110,15 @@ def main():
     p.add_argument("--inc-min", type=float, default=40.0)
     p.add_argument("--inc-max", type=float, default=79.0)
     p.add_argument("--out", type=Path, default=ROOT / "data" / "rv_vflat_relation.json")
+    p.add_argument("--figdir", type=Path, default=None,
+                   help="directory for the line-fit diagnostics (default: config figures path)")
+    p.add_argument("--scatter", choices=["vertical", "orthogonal"], default="vertical",
+                   help="intrinsic-scatter direction (vertical suits this directional relation)")
     args = p.parse_args()
 
     cfg = load_config(args.config)
     data_dir = ROOT / cfg["paths"]["data"]
+    fig_dir = args.figdir or (ROOT / cfg["paths"]["figures"])
 
     sparc = pd.read_csv(data_dir / "SPARC_Lelli2016c.mrt.csv")
     sparc_idx = sparc.drop_duplicates("Name").set_index("Name")
@@ -161,28 +168,38 @@ def main():
     y = tab.loc[mask, "Rv_b"].to_numpy()
     sy = tab.loc[mask, "e_Rv_b"].to_numpy()
 
-    # Fit in log10 space so R_v = 10**alpha * v_flat**beta stays positive at all masses.
-    lin = odr.Model(lambda B, xx: B[0] + B[1] * xx)
-    lx, lsx = np.log10(x), sx / x / np.log(10)
+    # Fit log R_v = gamma*log(v_flat/100) + delta with the Bayesian line fitter;
+    # v_flat normalised to 100 km/s, log10 errors propagated.
+    lx, lsx = np.log10(x / 100.0), sx / x / np.log(10)
     ly, lsy = np.log10(y), sy / y / np.log(10)
-    out = odr.ODR(odr.RealData(lx, ly, sx=lsx, sy=lsy), lin,
-                  beta0=np.polyfit(lx, ly, 1)[::-1]).run()
-    alpha, beta = float(out.beta[0]), float(out.beta[1])
-    cov = out.cov_beta
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    a, b, s, _ = BayesLineFit(
+        lx, ly, err_x=lsx, err_y=lsy, orthfit=(args.scatter == "orthogonal"),
+        plot_title="rvflat",
+        outfile_chain=str(fig_dir / "rv_vflat_chain.dat"),
+        outfile_bestfit=str(fig_dir / "rv_vflat_bestfit.txt"),
+        outplot_convergence=str(fig_dir / "rv_vflat_convergence"),
+        outplot_corner=str(fig_dir / "rv_vflat_corner"),
+        outplot_bestfit=str(fig_dir / "rv_vflat_bestfit"),
+    )
+    gamma, delta = float(a[1]), float(b[1])          # posterior medians
 
     rel = {
-        "form": "R_v[kpc] = 10**alpha * v_flat[km/s]**beta",
-        "alpha": alpha,
-        "beta": beta,
-        "alpha_err": float(np.sqrt(cov[0, 0])),
-        "beta_err": float(np.sqrt(cov[1, 1])),
-        "fit_method": "scipy.odr in log10 space, Boissier rotation-curve radii",
+        "form": "R_v[kpc] = 10**delta * (v_flat[km/s]/100)**gamma",
+        "gamma": gamma,
+        "delta": delta,
+        "gamma_err_up": float(a[2]),
+        "gamma_err_dw": float(a[3]),
+        "delta_err_up": float(b[2]),
+        "delta_err_dw": float(b[3]),
+        "scatter": float(s[1]),
+        "fit_method": f"BayesLineFit {args.scatter} scatter, Boissier radii, v_flat/100",
         "n_galaxies": int(mask.sum()),
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "w") as f:
         json.dump(rel, f, indent=2)
-    print(f"R_v = 10**{alpha:.4f} * v_flat**{beta:.4f}  (N={rel['n_galaxies']})")
+    print(f"R_v = 10**{delta:.4f} * (v_flat/100)**{gamma:.4f}  (N={rel['n_galaxies']})")
     print(f"wrote {args.out}")
 
 

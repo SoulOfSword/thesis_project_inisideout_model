@@ -14,22 +14,24 @@ _CMAP = cm.jet_r
 # jet_r(level), so this set drives both which curves appear and what colour they get.
 FGAS_LEVELS = {
     "io": {
-        "jbar":    (0.05, 0.075, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95),
-        "stellar": (0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95),
-        "gaseous": (0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95),
+        "jbar":    (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
+        "stellar": (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
+        "gaseous": (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
     },
     "nio": {
-        "jbar":    (0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95),
-        "stellar": (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9),
-        "gaseous": (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9),
+        "jbar":    (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
+        "stellar": (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
+        "gaseous": (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
     },
 }
 _DEFAULT_LEVELS = FGAS_LEVELS["io"]["jbar"]
 
 # compilation samples: marker + the column names that hold their (logM, logj) per plane
-_COMPILATION_MARKERS = {"Dwarfs": "p", "superthin": "s", "HIX": "X", "superspirals": "D"}
+_COMPILATION_MARKERS = {"Dwarfs": "p", "superthin": "s", "HIX": "X", "superspirals": "D",
+                        "GLSBs": "^", "UDGs": "P"}
 _COMPILATION_LABELS = {"Dwarfs": "Dwarfs", "superthin": "superthin",
-                       "HIX": "HIX", "superspirals": "superspirals"}
+                       "HIX": "HIX", "superspirals": "superspirals",
+                       "GLSBs": "GLSBs", "UDGs": "UDGs"}
 
 
 def _fgas_tracks(logx, logy, fgas, levels):
@@ -67,8 +69,9 @@ def _fgas_tracks(logx, logy, fgas, levels):
         yield lvl, xline[keep][o], yline[keep][o]
 
 
-def _legend(ax, model_lines):
-    """Two stacked legends: the f_gas model tracks and the galaxy-sample markers."""
+def _legend(ax, model_lines, gal_names):
+    """Two stacked legends: the f_gas model tracks and the galaxy-sample markers
+    (only the compilations actually drawn on this plane)."""
     models_header = plt.Line2D([0], [0], color="none", label=r"$\mathbf{Models}$")
     galaxies_header = plt.Line2D([0], [0], color="none", label=r"$\mathbf{Galaxies}$")
     gal = [plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="none",
@@ -76,7 +79,7 @@ def _legend(ax, model_lines):
     gal += [plt.Line2D([0], [0], marker=_COMPILATION_MARKERS[name], color="w",
                        markerfacecolor="none", markeredgecolor="k", markersize=10,
                        label=_COMPILATION_LABELS[name])
-            for name in _COMPILATION_MARKERS]
+            for name in gal_names]
     leg1 = ax.legend(handles=[models_header] + model_lines, loc="upper left",
                      framealpha=0.9)
     ax.add_artist(leg1)
@@ -101,6 +104,7 @@ def _draw_plane(ax, logM, logx, logy, fgas, obs_x, obs_y, obs_fgas,
     ax.errorbar(obs_x, obs_y, xerr=obs_x_err, yerr=obs_y_err, fmt=" ",
                 ecolor="grey", capsize=3, alpha=0.3, zorder=0)
 
+    drawn = []
     for i, (name, df) in enumerate(compilation.items(), start=3):
         marker = _COMPILATION_MARKERS.get(name)
         if marker is None or xcol not in df or ycol not in df:
@@ -108,8 +112,9 @@ def _draw_plane(ax, logM, logx, logy, fgas, obs_x, obs_y, obs_fgas,
         ax.scatter(df[xcol], df[ycol], marker=marker,
                    facecolors=_CMAP(np.asarray(df["fgas"], float)),
                    edgecolors="grey", s=70, zorder=i)
+        drawn.append(name)
 
-    _legend(ax, model_lines)
+    _legend(ax, model_lines, drawn)
     ax.set_title(title, fontsize=18)
     ax.set_xlabel(xlabel, fontsize=15)
     ax.set_ylabel(ylabel, fontsize=15)

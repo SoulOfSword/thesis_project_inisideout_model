@@ -63,5 +63,7 @@ def test_sfl_cutoff_matches_notebook():
     from jmfgas.physics import Rf, threshold_sigma_SFR
     nb_sfl = _load(NB_IO, "SFL", {"Rf": Rf, "threshold_sigma_SFR": threshold_sigma_SFR})
     sigma = np.logspace(-2, 3, 200)
+    # the cutoff coefficients are now re-fit from the same data + method, so they
+    # reproduce the notebook's hardcoded law only to within the fitter's MCMC scatter
     assert np.allclose(SFL(sigma, "cutoff_ksl", None, 1e10),
-                       nb_sfl(sigma, "cutoff_ksl", None, 1e10))
+                       nb_sfl(sigma, "cutoff_ksl", None, 1e10), rtol=0.05)

@@ -1,9 +1,12 @@
 {
-  "form": "R_v[kpc] = 10**alpha * v_flat[km/s]**beta",
-  "alpha": 3.0651913422858263,
-  "beta": -1.376666240935142,
-  "alpha_err": 0.05327681857640458,
-  "beta_err": 0.02667466252786783,
-  "fit_method": "scipy.odr in log10 space, Boissier rotation-curve radii",
+  "form": "R_v[kpc] = 10**delta * (v_flat[km/s]/100)**gamma",
+  "gamma": -0.5308286595497932,
+  "delta": 0.1856225630771431,
+  "gamma_err_up": 0.16260498335289725,
+  "gamma_err_dw": -0.16222166562707274,
+  "delta_err_up": 0.03506733090565345,
+  "delta_err_dw": -0.036110523208948836,
+  "scatter": 0.2945748460233406,
+  "fit_method": "BayesLineFit vertical scatter, Boissier radii, v_flat/100",
   "n_galaxies": 75
 }

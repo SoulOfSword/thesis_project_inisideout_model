@@ -22,8 +22,8 @@ j_max:
 
 sfl:
   default: cutoff_ksl
-  Rf: 0.45                         # return fraction
-  threshold_sigma_SFR: 1.0861925626996982
+  Rf: 0.45 # return fraction - 0.3 for old_ksl and 0.45 for the modern KSL
+  # fitted coefficients + cutoff threshold live in data/sfl_relations.json (see also fit_sfl.py)
 
 integration:
   res: 120          # number of radial points

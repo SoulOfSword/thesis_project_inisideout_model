@@ -1,7 +1,8 @@
 """Plot an inference result.
 
 --chain CHAIN.h5 : corner.corner (median/mode/16-84) + walker traces (burn-in/thin).
---grid GRID.npz  : one corner per zoom level (sampled posterior) into a <grid>.corner/ folder.
+--grid GRID.npz  : finest-level ΔlogL heatmap + 1-D marginals (<grid>.corner.pdf), plus
+                   one ΔlogL map per zoom level into a <grid>.levels/ folder.
 """
 
 import argparse
@@ -59,18 +60,29 @@ def plot_grid(args):
     labels = args.labels or [str(l) for l in d["labels"]]
     n_levels = int(d["n_levels"])
     peak = d["peak"] if "peak" in d.files else None
-    # paper figure: the sampled-posterior corner of the finest level
-    fig, stats = grid_corner(d["ax0"], d["ax1"], d["logL"], labels)
+    ext_ref = float(d["ref_logL"]) if "ref_logL" in d.files and np.isfinite(d["ref_logL"]) else None
+    ref = ext_ref if ext_ref is not None else float(d["peak_logL"])  # one shared scale across levels
+    # paper figure: finest-level heatmap with the 1-D marginals attached
+    fig, stats = grid_corner(d["ax0"], d["ax1"], d["logL"], labels, peak=peak, ref=ref,
+                             external_ref=ext_ref is not None)
     corner_out = args.grid.with_suffix(".corner.pdf")
     fig.savefig(corner_out, bbox_inches="tight"); plt.close(fig)
-    # diagnostic: one ΔlogL map per zoom level (level 0 = coarse prior, last = finest)
+    # diagnostic: one ΔlogL map per zoom level (level 0 = coarse prior, last = finest),
+    # all on the same colour scale (the global peak) so levels are directly comparable
     lvl_dir = args.grid.with_name(args.grid.stem + ".levels")
     lvl_dir.mkdir(parents=True, exist_ok=True)
+    for old in lvl_dir.glob("level*.pdf"):       # drop stale maps from an earlier run with more levels
+        old.unlink()
     for i in range(n_levels):
-        f = grid_logL_map(d[f"ax0_{i}"], d[f"ax1_{i}"], d[f"logL_{i}"], labels, peak=peak)
+        f = grid_logL_map(d[f"ax0_{i}"], d[f"ax1_{i}"], d[f"logL_{i}"], labels, peak=peak, ref=ref,
+                          external_ref=(ext_ref is not None) or (i != n_levels - 1))
         f.savefig(lvl_dir / f"level{i}.pdf", bbox_inches="tight"); plt.close(f)
     for lab, (mid, lo, hi, mode) in zip(labels, stats):
         print(f"{lab} = {mid:.4f} (+{hi-mid:.4f} / -{mid-lo:.4f})  mode={mode:.4f}")
+    if ext_ref is not None:
+        here = float(np.nanmax(d["logL"]))
+        print(f"max logL here = {here:.1f};  reference (full grid) = {ext_ref:.1f};  "
+              f"offset = {here - ext_ref:.1f}")
     print(f"wrote {corner_out}  and {n_levels} level maps -> {lvl_dir}/")
 
 
