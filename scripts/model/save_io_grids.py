@@ -22,7 +22,7 @@ import jax.numpy as jnp
 
 from jmfgas.config import load_config
 from jmfgas.models.common import T0, log_M_bar_array
-from jmfgas.models.inside_out import build_r_acc_matrix_for_all_M_jax, run_all_masses
+from jmfgas.models import build_r_acc_matrix_for_all_M_jax, run_all_masses
 
 # default accretion-rate grid (one column per value); t_acc = 1 / omega
 DEFAULT_OMEGA = [-1.0, -0.3, 0.1, 1.0 / 3.0, 0.75, 1.0, 2.0, 4.0, 8.0, 10.0]
@@ -42,9 +42,9 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     cfg = load_config()
-    io_init = cfg["mcmc"]["io"]["init"]
+    acc_init = cfg["mcmc"]["accretion"]["init"]
     p.add_argument("--params", type=float, nargs=2, metavar=("n", "k"),
-                   default=io_init, help="inside-out growth params n k")
+                   default=acc_init, help="inside-out growth params n k")
     p.add_argument("--sfl", default=cfg["sfl"]["default"])
     p.add_argument("--t0", type=float, default=cfg["time"]["t0"])
     p.add_argument("--omega", type=float, nargs="+", default=DEFAULT_OMEGA,

@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "src"))
 import jax.numpy as jnp
 
 from jmfgas.config import load_config
-from jmfgas.models.non_inside_out import (build_r_acc_for_single_M,
+from jmfgas.models import (build_r_acc_for_single_M,
                                           Full_final_definer_Mdep_omega_jax)
 
 DEFAULT_BAND_BINS = [(9.0, 9.5), (9.7, 10.3), (10.8, 11.2)]
@@ -58,9 +58,9 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     cfg = load_config()
-    nio_init = cfg["mcmc"]["nio"]["init"]
+    spin_init = cfg["mcmc"]["spin"]["init"]
     p.add_argument("--params", type=float, nargs=2, metavar=("a", "b"),
-                   default=nio_init, help="omega(logM) coefficients a b")
+                   default=spin_init, help="omega(logM) coefficients a b")
     p.add_argument("--sfl", default=cfg["sfl"]["default"])
     p.add_argument("--n-j", type=int, default=cfg["integration"]["n_j"],
                    help="j_acc grid points per mass")

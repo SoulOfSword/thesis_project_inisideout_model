@@ -1,21 +1,21 @@
-"""Per-galaxy residuals (chi = (model - obs)/sigma) for the IO and NIO models, side by side.
+"""Per-galaxy residuals (chi = (model - obs)/sigma) for the accretion- and spin-bias models,
+side by side. Both are inside-out; for each galaxy the observed j_bar fixes the model's free
+scatter parameter, the inside-out engine is run, and chi is plotted vs log M_bar, coloured by
+observed f_gas. One column per model:
 
-For each galaxy the observed j_bar fixes the model's free accretion parameter (the same
-path the likelihood / comparison figures use), the model is run, and chi is plotted against
-log M_bar, coloured by observed f_gas. One column per model:
-
-  --io-params  n k : inside-out column. j_bar is inverted to its accretion rate omega at
-                     (n, k); the model is run and chi computed for each quantity.
-  --nio-params a b : non-inside-out column. omega(M_bar)=a*(Mbar/1e10)^b is fixed by mass and
-                     j_acc is set to the observed j_bar; the model is run.
+  --accretion-params n k : accretion-bias column. j_bar is inverted to the accretion rate omega
+                           at fixed (n, k); the engine is run and chi computed per quantity.
+  --spin-params a b      : spin-bias column. omega=a*(Mbar/1e10)^b is fixed by mass and the spin
+                           parameter k is inverted from j_bar (n=1); the engine is run.
 
 The quantity set is chosen on the CLI:
   fgas : f_gas and j_bar          (the f_gas-likelihood observables; any sample)
   all  : f_gas, j_bar, M_gas, M_star, j_gas, j_star   (needs the decomposed -> converged sample)
 
-The inside-out r_acc grid is extended (residual-plots only) out to the sample's heaviest
-galaxy, so the massive end isn't snapped to the 11.5 edge bin (which biased its forward
-j_bar low). NIO uses the exact M_bar, so it has no such snap. Saves to outputs/residuals/.
+The accretion r_acc grid is extended (residual-plots only) out to the sample's heaviest galaxy,
+so the massive end isn't snapped to the 11.5 edge bin (which biased its forward j_bar low). The
+spin column builds an r_acc row per galaxy at that galaxy's exact mass, so it has no snap. Saves
+to outputs/residuals/.
 """
 
 import argparse
@@ -58,7 +58,7 @@ def extended_mass_grid(logM_sample, mass_grid_cfg, margin=0.05):
     """The config mass grid extended (same spacing) to cover the sample's heaviest galaxy.
 
     Residual-plots only: removes the nearest-bin r_acc snap at the massive end (which biases
-    the IO forward j_bar low for the superspirals). The model's default grid is untouched."""
+    the accretion forward j_bar low for the superspirals). The default grid is untouched."""
     lo, hi_cfg, n = mass_grid_cfg["logM_min"], mass_grid_cfg["logM_max"], mass_grid_cfg["n"]
     dlog = (hi_cfg - lo) / (n - 1)
     hi = max(hi_cfg, float(np.max(logM_sample)) + margin)
@@ -66,15 +66,15 @@ def extended_mass_grid(logM_sample, mass_grid_cfg, margin=0.05):
     return np.linspace(lo, hi, n_ext)
 
 
-def compute_chi_io(n, k, obs, quantities, t0, logM_grid, sfl, rmax):
-    """IO chi per quantity: invert j_bar -> omega at (n, k), run the model, compare.
-    Returns (chi dict, count of omega-clipped galaxies). Uses the given (extended) mass grid
-    and integration radius rmax."""
+def compute_chi_accretion(n, k, obs, quantities, t0, logM_grid, sfl, rmax):
+    """Accretion-bias chi per quantity: invert j_bar -> omega at fixed (n, k), run the inside-out
+    engine, compare. Returns (chi dict, count of omega-clipped galaxies). Uses the given
+    (extended) mass grid and integration radius rmax."""
     import jax.numpy as jnp
     from jmfgas.physics.angmom import j_maxer
-    from jmfgas.models.inside_out import (solve_omega_bisect_autobracket_jax,
-                                          all_obs_for_galaxies_jax,
-                                          build_r_acc_matrix_for_all_M_jax)
+    from jmfgas.models import (solve_omega_bisect_autobracket_jax,
+                               all_obs_for_galaxies_jax,
+                               build_r_acc_matrix_for_all_M_jax)
 
     logM = jnp.asarray(obs["logMbar"], dtype=jnp.float64)
     jbar = jnp.asarray(obs["jbar"], dtype=jnp.float64)
@@ -82,9 +82,9 @@ def compute_chi_io(n, k, obs, quantities, t0, logM_grid, sfl, rmax):
     grid = jnp.asarray(logM_grid, dtype=jnp.float64)
     r_acc = build_r_acc_matrix_for_all_M_jax(jnp.float64(n), jnp.float64(k), grid)
 
-    j_max = j_maxer(Mbar)
-    j_min = j_max / 10.0
-    delta_j = jnp.maximum(k * j_max - j_min, 1e-12)
+    j_max = j_maxer(Mbar)                              # = j_MP (asymptotic MP+21 value)
+    j_min = k * j_max / 10.0                           # floor = (k*j_MP)/10, scales with k
+    delta_j = jnp.maximum(k * j_max - j_min, 1e-12)    # = 0.9*k*j_MP
     y_raw = (jbar - j_min) / delta_j
     omega, ok = solve_omega_bisect_autobracket_jax(y_raw, n, t0)
     omega_assigned = jnp.where(ok, omega, jnp.where(y_raw < 0.0, 10.0, -10.0))
@@ -100,21 +100,16 @@ def compute_chi_io(n, k, obs, quantities, t0, logM_grid, sfl, rmax):
     return chi, int(np.sum(np.asarray(was_clipped)))
 
 
-def compute_chi_nio(a, b, obs, quantities, t0, sfl, rmax):
-    """NIO chi per quantity: omega(M_bar)=a*(Mbar/1e10)^b fixed by mass, j_acc set to the
-    observed j_bar, run the model, compare. Returns (chi dict, 0 clipped)."""
-    import jax.numpy as jnp
-    from jmfgas.physics.radius import r_btfr_def
-    from jmfgas.models.non_inside_out import run_all_masses_Mdep_omega_jax
+def compute_chi_spin(a, b, obs, quantities, t0, sfl, rmax):
+    """Spin-bias chi per quantity: omega(M_bar)=a*(Mbar/1e10)^b fixed by mass, the spin parameter
+    k inverted from the observed j_bar (n=1), then the inside-out engine run forward and compared.
+    Returns (chi dict, 0 clipped). NIO's constant-radius engine is not used here anymore."""
+    from jmfgas.models import spin_obs_for_galaxies
 
     logM = np.asarray(obs["logMbar"], float)
     jbar = np.asarray(obs["jbar"], float)
-    Mbar = 10.0 ** logM
-    r_acc = np.array([[float(r_btfr_def(mb, jb))] for mb, jb in zip(Mbar, jbar)])  # j_acc = obs j_bar
-    out = run_all_masses_Mdep_omega_jax(
-        jnp.asarray(logM, dtype=jnp.float64), float(a), float(b),
-        jnp.asarray(r_acc, dtype=jnp.float64), star_formation_law=sfl, Rmax=rmax)
-    mod = [np.asarray(o)[:, 0] for o in out]
+    out = spin_obs_for_galaxies(logM, jbar, float(a), float(b), sfl, n=1.0, Rmax=rmax)
+    mod = [np.asarray(o) for o in out]
     chi = {q: (mod[_MODEL_IDX[q]] - obs[q]) / obs["e_" + q] for q in quantities}
     return chi, 0
 
@@ -124,15 +119,15 @@ def main():
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("quantities", choices=["fgas", "all"],
                    help="fgas: f_gas+j_bar; all: + the four decomposed observables")
-    p.add_argument("--io-params", type=float, nargs=2, metavar=("N", "K"), default=None,
-                   help="inside-out (n, k) -> a column")
-    p.add_argument("--nio-params", type=float, nargs=2, metavar=("A", "B"), default=None,
-                   help="non-inside-out (a, b) for omega=a*(Mbar/1e10)^b -> a column")
+    p.add_argument("--accretion-params", type=float, nargs=2, metavar=("N", "K"), default=None,
+                   help="accretion-bias (n, k) -> a column")
+    p.add_argument("--spin-params", type=float, nargs=2, metavar=("A", "B"), default=None,
+                   help="spin-bias (a, b) for omega=a*(Mbar/1e10)^b -> a column (n=1, k inverted)")
     p.add_argument("--sample", default=None,
                    help="sample name (default: full for fgas, converged for all)")
     p.add_argument("--sfl", default=None, help="star-formation law (default: config sfl.default)")
     p.add_argument("--no-extend-racc", action="store_true",
-                   help="keep the IO r_acc mass grid at the config cap (don't extend to the sample)")
+                   help="keep the accretion r_acc mass grid at the config cap (don't extend)")
     p.add_argument("--rmax", type=float, default=300.0,
                    help="integration radius [kpc] for the forward model; the default 100.1 kpc "
                         "truncates the largest disks (superspirals/HIX/GLSB), biasing their j_bar low")
@@ -149,14 +144,16 @@ def main():
     sfl = args.sfl or cfg["sfl"]["default"]
     quantities = _SETS[args.quantities]
 
-    # columns: inside-out then non-inside-out (whichever params were given)
+    # columns: accretion-bias then spin-bias (whichever params were given)
     columns = []                                    # (model, p0, p1, tag)
-    if args.io_params is not None:
-        columns.append(("io", *args.io_params, f"io_n{args.io_params[0]:.2f}_k{args.io_params[1]:.2f}"))
-    if args.nio_params is not None:
-        columns.append(("nio", *args.nio_params, f"nio_a{args.nio_params[0]:.2f}_b{args.nio_params[1]:.2f}"))
+    if args.accretion_params is not None:
+        columns.append(("accretion", *args.accretion_params,
+                        f"accretion_n{args.accretion_params[0]:.2f}_k{args.accretion_params[1]:.2f}"))
+    if args.spin_params is not None:
+        columns.append(("spin", *args.spin_params,
+                        f"spin_a{args.spin_params[0]:.2f}_b{args.spin_params[1]:.2f}"))
     if not columns:
-        raise SystemExit("pass --io-params N K and/or --nio-params A B")
+        raise SystemExit("pass --accretion-params N K and/or --spin-params A B")
 
     sample = args.sample or ("converged" if args.quantities == "all" else "full")
     obs, group = load_sample(sample, data_dir)
@@ -165,13 +162,13 @@ def main():
         raise SystemExit(f"sample {sample!r} lacks columns for {missing}; "
                          "use --sample converged for 'all' (it carries M_gas/M_star/j_gas/j_star)")
 
-    # extended IO r_acc grid (residual-plots only); NIO uses exact M_bar so needs no grid
+    # extended accretion r_acc grid (residual-plots only); spin builds per-galaxy rows at exact mass
     if args.no_extend_racc:
         logM_grid = np.linspace(cfg["mass_grid"]["logM_min"], cfg["mass_grid"]["logM_max"],
                                 cfg["mass_grid"]["n"])
     else:
         logM_grid = extended_mass_grid(obs["logMbar"], cfg["mass_grid"])
-        print(f"[residuals] IO r_acc grid extended to logM={logM_grid[-1]:.2f} "
+        print(f"[residuals] accretion r_acc grid extended to logM={logM_grid[-1]:.2f} "
               f"({len(logM_grid)} bins; sample max {obs['logMbar'].max():.2f})")
 
     logM, fgas = obs["logMbar"], obs["fgas"]
@@ -182,12 +179,12 @@ def main():
     fig, axes = plt.subplots(nq, nm, figsize=(7.5 * nm, 3.3 * nq), dpi=150, squeeze=False)
 
     for col, (model, p0, p1, tag) in enumerate(columns):
-        if model == "io":
-            chi, nclip = compute_chi_io(p0, p1, obs, quantities, t0, logM_grid, sfl, args.rmax)
-            header = f"IO  n={p0:.2f}, k={p1:.2f}  (clipped: {nclip}/{N})"
+        if model == "accretion":
+            chi, nclip = compute_chi_accretion(p0, p1, obs, quantities, t0, logM_grid, sfl, args.rmax)
+            header = f"variable accretion  n={p0:.2f}, k={p1:.2f}  (clipped: {nclip}/{N})"
         else:
-            chi, nclip = compute_chi_nio(p0, p1, obs, quantities, t0, sfl, args.rmax)
-            header = rf"NIO  $\omega={p0:g}(M/10^{{10}})^{{{p1:g}}}$,  $j_{{\rm acc}}=j_{{\rm bar,obs}}$"
+            chi, nclip = compute_chi_spin(p0, p1, obs, quantities, t0, sfl, args.rmax)
+            header = rf"variable torques  a={p0:g}, b={p1:g}, n=1"
         print(f"[{tag}] clipped={nclip}/{N}")
         for row, q in enumerate(quantities):
             ax = axes[row][col]

@@ -6,7 +6,7 @@ import jmfgas
 def test_config_loads():
     cfg = jmfgas.load_config()
     assert cfg["time"]["t0"] == 12.0
-    assert cfg["mcmc"]["nio"]["bounds"]["a"] == [-1.5, 7.0]
+    assert cfg["mcmc"]["spin"]["bounds"]["a"] == [-1.5, 7.0]
 
 
 def test_npz_roundtrip(tmp_path):

@@ -16,7 +16,7 @@ from jmfgas.physics.kinematics import exp_vrot_jax
 from jmfgas.physics.angmom import j_maxer
 from jmfgas.physics.radius import r_btfr_def
 from jmfgas.models import common as C
-import jmfgas.models.non_inside_out as nio
+import jmfgas.models as nio
 
 NB = jmfgas.ROOT / "notebooks" / "model_non_inside_out.ipynb"
 _NAMES = ["omega_Mdep", "tacc_Mdep", "sigma_acc_const_jax", "choose_dt_const_jax",

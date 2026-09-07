@@ -1,7 +1,9 @@
 """Draw the three final planes (j_bar-M_bar-f_gas, stellar, gaseous) for one model.
 
---model io   uses the saved present-day grids in data/data9_JAX_aKSL/final_*_cutoff_ksl.txt
---model nio  runs the engine with omega(M) = a*(Mbar/1e10)**b for the given (a, b)
+--model accretion  inside-out engine, fixed (n, k), the scatter is a swept accretion rate omega
+                   (or the saved tables in data/data9_JAX_aKSL/ when no --params is given)
+--model spin       inside-out engine, omega=a*(Mbar/1e10)**b fixed by mass, the scatter is a swept
+                   spin parameter k (0.2..2, capping j_acc) at n=1
 
 The model tracks (one line per fixed f_gas level, coloured by f_gas) overlay the
 observed CONVERGED sample and the external compilation samples. Three PDFs are
@@ -98,26 +100,51 @@ def io_model_grids(grid_dir):
             "M_star": load("Mstar_grid"), "M_gas": load("Mgas_grid")}
 
 
-# accretion-rate grid for the io model curves (omega in Gyr^-1; t_acc = 1/omega)
-_IO_OMEGA = (-1.0, -0.3, 0.1, 1.0 / 3.0, 0.75, 1.0, 2.0, 4.0, 8.0, 10.0)
+# accretion-bias scatter grid: omega swept (Gyr^-1; t_acc = 1/omega) at fixed (n, k)
+_ACCRETION_OMEGA = (-1.0, -0.3, 0.1, 1.0 / 3.0, 0.75, 1.0, 2.0, 4.0, 8.0, 10.0)
+# spin scatter grid: k swept (caps j_acc at t0) at fixed omega = omega_Mdep(M), n=1
+_SPIN_K = np.linspace(0.2, 6.0, 25)
+
+# fiducial parameters per model; anything else gets its values appended to the file name
+_FIDUCIAL = {"accretion": (1.0, 2.0), "spin": (0.1, 0.5)}
+_PARAM_NAMES = {"accretion": ("n", "k"), "spin": ("a", "b")}
 
 
-def io_model_grids_live(logM, n, k, sfl):
-    """Run the inside-out engine over the mass + omega grid for parameters (n, k)."""
+def param_suffix(model, p0, p1):
+    """'_n0.5_k2' for non-fiducial parameters, '' for the fiducial ones."""
+    fid = _FIDUCIAL.get(model)
+    if fid is None or (p0, p1) == fid:
+        return ""
+    n0, n1 = _PARAM_NAMES[model]
+    return f"_{n0}{p0:g}_{n1}{p1:g}"
+
+
+def accretion_model_grids(logM, n, k, sfl, lambda_ratio=1.0):
+    """Inside-out engine over the mass + omega grid at fixed (n, k) — the accretion band.
+
+    lambda_ratio scales j_min for a halo of non-median spin; 1.0 is the median halo."""
     import jax.numpy as jnp
-    from jmfgas.models.inside_out import build_r_acc_matrix_for_all_M_jax, run_all_masses
-    t_acc = jnp.asarray(1.0 / np.asarray(_IO_OMEGA, float), dtype=jnp.float64)
-    r_acc = build_r_acc_matrix_for_all_M_jax(jnp.float64(n), jnp.float64(k))
+    from jmfgas.models import build_r_acc_matrix_for_all_M_jax, run_all_masses
+    t_acc = jnp.asarray(1.0 / np.asarray(_ACCRETION_OMEGA, float), dtype=jnp.float64)
+    r_acc = build_r_acc_matrix_for_all_M_jax(jnp.float64(n), jnp.float64(k),
+                                             lambda_ratio=jnp.float64(lambda_ratio))
     out = run_all_masses(jnp.asarray(10.0 ** logM, dtype=jnp.float64), t_acc, r_acc,
                          jnp.asarray(logM, dtype=jnp.float64), star_formation_law=sfl)
     keys = ("f_gas", "j_bar", "j_gas", "j_star", "M_star", "M_gas")
     return {key: np.asarray(v) for key, v in zip(keys, out)}
 
 
+def lambda_ratios(cfg):
+    """The five lambda/lambda_median values from the config (median first is NOT assumed)."""
+    ls = cfg["lambda_scatter"]
+    return np.exp(ls["sigma_ln"] * np.asarray(ls["offsets"], float))
+
+
 def read_source(path, burn_in):
     """(model, p0, p1, sample) from a grid .npz (its peak) or a chain .h5 (its median)."""
     path = Path(path)
-    model = next((tok for tok in path.stem.split("_") if tok in ("io", "nio")), None)
+    model = next((tok for tok in path.stem.split("_")
+                  if tok in ("accretion", "spin", "io", "nio")), None)
     sample = None
     if path.suffix == ".npz":
         d = np.load(path, allow_pickle=True)
@@ -131,23 +158,16 @@ def read_source(path, burn_in):
         flat = emcee.backends.HDFBackend(str(path), read_only=True).get_chain(
             discard=burn_in, flat=True)
         p0, p1 = (float(v) for v in np.median(flat, axis=0))
-    if model is None:
-        raise SystemExit(f"can't tell io/nio from {path.name}; pass --model")
+    model = {"io": "accretion", "nio": "spin"}.get(model, model)   # legacy grids/chains
+    if model not in ("accretion", "spin"):
+        raise SystemExit(f"can't tell accretion/spin from {path.name}; pass --model")
     return model, p0, p1, sample
 
 
-def nio_model_grids(logM, a, b, sfl, n_j):
-    """Run the non-inside-out engine over the mass grid for parameters (a, b)."""
-    import jax.numpy as jnp
-    from jmfgas.models import build_r_acc_for_single_M, run_all_masses_Mdep_omega_jax
-
-    r_acc = np.array([build_r_acc_for_single_M(lm, n_j=n_j)[0] for lm in logM])
-    f_gas, j_bar, j_gas, j_star, M_star, M_gas = run_all_masses_Mdep_omega_jax(
-        jnp.asarray(logM, dtype=jnp.float64), a, b,
-        jnp.asarray(r_acc, dtype=jnp.float64), star_formation_law=sfl)
-    arr = lambda x: np.asarray(x)
-    return {"f_gas": arr(f_gas), "j_bar": arr(j_bar), "j_star": arr(j_star),
-            "j_gas": arr(j_gas), "M_star": arr(M_star), "M_gas": arr(M_gas)}
+def spin_model_grids(logM, a, b, sfl):
+    """Inside-out engine over the mass + k grid at fixed omega=omega_Mdep(M) — the spin-bias band."""
+    from jmfgas.models import spin_grids_over_k
+    return spin_grids_over_k(logM, a, b, _SPIN_K, sfl)
 
 
 def _save(fig, path):
@@ -161,7 +181,7 @@ def main():
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--from", dest="source", type=Path, default=None,
                    help="grid .npz or chain .h5 to read (model, best-fit params) from")
-    p.add_argument("--model", choices=["io", "nio"], default=None,
+    p.add_argument("--model", choices=["accretion", "spin"], default=None,
                    help="only needed without --from")
     p.add_argument("--params", type=float, nargs=2, default=None, metavar=("P1", "P2"),
                    help="(n, k) or (a, b), with --model, instead of --from")
@@ -208,18 +228,19 @@ def main():
         "gaseous": gaseous_arrays(data_dir) if use_full else obs,
     }
 
-    if model == "io":
+    if model == "accretion":
         if p0 is None:
             grids = io_model_grids(data_dir / "data9_JAX_aKSL")   # original saved tables
-            label = ""
         else:
-            grids = io_model_grids_live(logM, p0, p1, sfl)
-            label = f"(k = {p1:.2f}, n = {p0:.2f})"
-    else:
+            grids = accretion_model_grids(logM, p0, p1, sfl)
+            stem += param_suffix(model, p0, p1)
+    elif model == "spin":
         a, b = (p0, p1) if p0 is not None else (
-            cfg["mcmc"]["nio"]["init"][0], cfg["mcmc"]["nio"]["init"][1])
-        grids = nio_model_grids(logM, a, b, sfl, cfg["integration"]["n_j"])
-        label = f"(a = {a:.2f}, b = {b:.2f})"
+            cfg["mcmc"]["spin"]["init"][0], cfg["mcmc"]["spin"]["init"][1])
+        grids = spin_model_grids(logM, a, b, sfl)
+        stem += param_suffix(model, a, b)
+    else:
+        raise SystemExit(f"unknown model {model!r} (expected accretion or spin)")
 
     plane_specs = [
         ("baryonic", plane_jM_fgas, "j_bar", "jbar"),
@@ -233,11 +254,10 @@ def main():
         levels = FGAS_LEVELS[model][lkey]         # f_gas line set differs by model + plane
         fig, ax = plt.subplots(figsize=(8, 8), dpi=200, facecolor="w")
         if tag == "baryonic":
-            fn(ax, logM, grids["j_bar"], grids["f_gas"], obs_by_tag[tag], comp,
-               params_label=label, levels=levels)
+            fn(ax, logM, grids["j_bar"], grids["f_gas"], obs_by_tag[tag], comp, levels=levels)
         else:
             fn(ax, grids[mkey], grids[j_for[tag]], grids["f_gas"], obs_by_tag[tag], comp,
-               params_label=label, levels=levels)
+               levels=levels)
         _save(fig, out_dir / f"plane_{tag}_{stem}.pdf")
 
     return 0

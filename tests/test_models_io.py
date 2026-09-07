@@ -14,7 +14,7 @@ import jmfgas
 from jmfgas.physics.sfl import SFL_jax
 from jmfgas.physics.kinematics import exp_vrot_jax
 from jmfgas.models import common as C
-import jmfgas.models.inside_out as io
+import jmfgas.models as io
 
 NB = jmfgas.ROOT / "notebooks" / "model_inside_out.ipynb"
 _NAMES = ["interp1d_jax", "get_dt_params_from_r_acc", "sigma_acc_jax", "choose_dt_jax",

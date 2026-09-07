@@ -48,10 +48,10 @@ def build_log_prob(model, likelihood, sample, cfg, data_dir,
     t = obs_table(sample, data_dir, mass_range, exclude_hix)
     jx = lambda c: jnp.asarray(t[c], dtype=jnp.float64)
 
-    if model == "io":
-        nb = cfg["mcmc"]["io"]["bounds"]["n"]
-        kb = cfg["mcmc"]["io"]["bounds"]["k"]
-        init = list(cfg["mcmc"]["io"]["init"])
+    if model == "accretion":
+        nb = cfg["mcmc"]["accretion"]["bounds"]["n"]
+        kb = cfg["mcmc"]["accretion"]["bounds"]["k"]
+        init = list(cfg["mcmc"]["accretion"]["init"])
         if likelihood == "4obs":
             lp = LogProbabilityEmcee4Obs(
                 jx("logMbar"), jx("jbar"), jx("Mgas"), jx("e_Mgas"), jx("Mstar"), jx("e_Mstar"),
@@ -61,12 +61,12 @@ def build_log_prob(model, likelihood, sample, cfg, data_dir,
             lp = LogProbabilityEmcee(jx("logMbar"), jx("jbar"), jx("fgas"), jx("e_fgas"),
                                      jx("e_jbar"), log_M_bar_array_jax, nb, kb)
         else:
-            raise ValueError("io supports likelihood 4obs or fgas")
+            raise ValueError("accretion supports likelihood 4obs or fgas")
         return lp, 2, init, [tuple(nb), tuple(kb)]
 
-    ab = cfg["mcmc"]["nio"]["bounds"]["a"]
-    bb = cfg["mcmc"]["nio"]["bounds"]["b"]
-    init = list(cfg["mcmc"]["nio"]["init"])
+    ab = cfg["mcmc"]["spin"]["bounds"]["a"]
+    bb = cfg["mcmc"]["spin"]["bounds"]["b"]
+    init = list(cfg["mcmc"]["spin"]["init"])
     if likelihood == "fgas":                # fgas needs only jbar + fgas, so the full sample is ok
         obs = (t["logMbar"], t["jbar"], t["fgas"], t["e_fgas"])
         return (NIOPosteriorFgas(obs, (ab[0], ab[1], bb[0], bb[1])),
@@ -79,4 +79,4 @@ def build_log_prob(model, likelihood, sample, cfg, data_dir,
     if likelihood == "a0":
         return (NIOPosteriorA0(obs4, "cutoff_ksl", bb[0], bb[1]),
                 1, [init[1]], [tuple(bb)])
-    raise ValueError("nio supports likelihood 4obs, fgas or a0")
+    raise ValueError("spin supports likelihood 4obs, fgas or a0")

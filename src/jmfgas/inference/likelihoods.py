@@ -11,12 +11,12 @@ from jax import lax
 from ..config import load_config
 from ..physics.angmom import j_maxer
 from ..physics.radius import r_btfr_def
-from ..models.inside_out import (solve_omega_bisect_autobracket_jax,
-                                 fgas_and_jbar_for_galaxies_jax,
-                                 all_obs_for_galaxies_jax,
-                                 build_r_acc_matrix_for_all_M_jax)
-from ..models.non_inside_out import (run_single_galaxy_from_jbar,
-                                     Full_final_definer_Mdep_omega_jax)
+from ..models.common import (fgas_and_jbar_for_galaxies_jax,
+                             all_obs_for_galaxies_jax,
+                             build_r_acc_matrix_for_all_M_jax)
+from ..models.accretion import solve_omega_bisect_autobracket_jax
+from ..models.spin import (run_single_galaxy_from_jbar,
+                           Full_final_definer_Mdep_omega_jax)
 
 _cfg = load_config()
 T0 = _cfg["time"]["t0"]
@@ -36,8 +36,8 @@ def logL_jax(theta, logM_obs, jbar_obs, fgas_obs, sigma_fgas_obs, sigma_j_obs,
     def body():
         Mbar_obs = 10.0**logM_obs
         j_max = j_maxer(Mbar_obs)
-        j_min = j_max / 10.0
-        delta_j = jnp.maximum(k * j_max - j_min, 1e-12)
+        j_min = k * j_max / 10.0                       # floor = (k*j_MP)/10 (j_max here is j_MP)
+        delta_j = jnp.maximum(k * j_max - j_min, 1e-12)   # = 0.9*k*j_MP
         y_raw = (jbar_obs - j_min) / delta_j
 
         omega, ok = solve_omega_bisect_autobracket_jax(y_raw, n, t0)
@@ -75,8 +75,8 @@ def logL_4obs_jax(theta, logM_obs, jbar_obs, Mgas_obs, sigma_Mgas, Mstar_obs, si
     def body():
         Mbar_obs = 10.0**logM_obs
         j_max = j_maxer(Mbar_obs)
-        j_min = j_max / 10.0
-        delta_j = jnp.maximum(k * j_max - j_min, 1e-12)
+        j_min = k * j_max / 10.0                       # floor = (k*j_MP)/10 (j_max here is j_MP)
+        delta_j = jnp.maximum(k * j_max - j_min, 1e-12)   # = 0.9*k*j_MP
         y_raw = (jbar_obs - j_min) / delta_j
 
         omega, ok = solve_omega_bisect_autobracket_jax(y_raw, n, t0)

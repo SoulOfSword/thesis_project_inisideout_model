@@ -29,9 +29,9 @@ def _resolve_labels(args, ndim):
     model = args.model
     if model is None and args.chain is not None:
         parts = args.chain.stem.split("_")          # chain_<model>_<lik>_<sample>...
-        if len(parts) > 1 and parts[1] in ("io", "nio"):
+        if len(parts) > 1 and parts[1] in ("accretion", "spin"):
             model = parts[1]
-    if model in ("io", "nio"):
+    if model in ("accretion", "spin"):
         return [f"${n}$" for n in load_config()["mcmc"][model]["param_names"]]
     return [f"$p_{{{i}}}$" for i in range(ndim)]
 
@@ -93,7 +93,7 @@ def main():
     src.add_argument("--chain", type=Path)
     src.add_argument("--grid", type=Path)
     p.add_argument("--labels", nargs="+", default=None)
-    p.add_argument("--model", choices=["io", "nio"], default=None,
+    p.add_argument("--model", choices=["accretion", "spin"], default=None,
                    help="label params by model (default: inferred from the chain filename)")
     p.add_argument("--burn-in", type=int, default=0)
     p.add_argument("--thin", type=int, default=1)

@@ -39,7 +39,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from jmfgas.config import load_config
 from jmfgas.data import sample_frame
 from jmfgas.physics.angmom import j_maxer
-from jmfgas.models.inside_out import (F_omega_jax, fgas_and_jbar_for_galaxies_jax,
+from jmfgas.models import (F_omega_jax, fgas_and_jbar_for_galaxies_jax,
                                       build_r_acc_matrix_for_all_M_jax)
 from jmfgas.models.common import log_M_bar_array_jax
 

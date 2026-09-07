@@ -25,7 +25,7 @@ import jax.numpy as jnp
 
 from jmfgas.config import load_config
 from jmfgas.models.common import log_M_bar_array_jax, M_times1, C_def_jax
-from jmfgas.models.inside_out import build_r_acc_matrix_for_all_M_jax
+from jmfgas.models import build_r_acc_matrix_for_all_M_jax
 from jmfgas.physics.angmom import j_maxer, j_acc_def
 from jmfgas.models.profiles import radial_profiles_io, radial_profiles_nio
 
@@ -71,10 +71,10 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     cfg = load_config()
-    p.add_argument("--model", choices=["io", "nio"], required=True)
+    p.add_argument("--model", choices=["accretion", "spin"], required=True)
     p.add_argument("--logM", type=float, default=10.0)
     p.add_argument("--params", type=float, nargs=2, default=None,
-                   help="io: n k (default 0.5 1.5); nio: a b (default 2 2)")
+                   help="accretion: n k (default 0.5 1.5); spin: a b (default 2 2)")
     p.add_argument("--sfl", default=cfg["sfl"]["default"])
     p.add_argument("--out-dir", type=Path, default=None)
     args = p.parse_args()
@@ -83,7 +83,7 @@ def main():
     out_dir = args.out_dir or (prof_root / args.model)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.model == "io":
+    if args.model == "accretion":
         n, k = args.params if args.params else (0.5, 1.5)
         written = save_io(args.logM, n, k, args.sfl, out_dir)
     else:

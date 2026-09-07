@@ -82,7 +82,7 @@ def test_planes_render():
                      (plane_stellar, (g["M_star"], g["j_star"], g["f_gas"])),
                      (plane_gaseous, (g["M_gas"], g["j_gas"], g["f_gas"]))]:
         fig, ax = plt.subplots()
-        sc = fn(ax, *args, obs, comp, params_label="(test)")
+        sc = fn(ax, *args, obs, comp)
         assert sc is not None
         assert len(ax.lines) > 0      # at least one f_gas model track was drawn
         plt.close(fig)

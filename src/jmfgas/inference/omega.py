@@ -9,8 +9,10 @@ bracket-and-bisect inversion gives omega per galaxy.
 import numpy as np
 from scipy.integrate import simpson
 
+from ..config import load_config
 from ..physics.angmom import j_maxer
 
+T0 = load_config()["time"]["t0"]         # present-day time [Gyr], from config
 _X = np.linspace(0.0, 1.0, 256)          # fixed grid for the dimensionless integral
 
 
@@ -26,7 +28,7 @@ def F_omega(omega, n, t0):
     return _gamma_integral(omega, n, t0) / _gamma_integral(omega, 0.0, t0)
 
 
-def solve_omega(y_target, n, t0=12.0, omega0=1.0, max_expand=60, n_iter=50):
+def solve_omega(y_target, n, t0=T0, omega0=1.0, max_expand=60, n_iter=50):
     """Bracket-and-bisect F_omega(.) = y for each y_target.
 
     Returns (omega, ok); ok is False where y is outside (0, 1) and no bracket exists.
@@ -47,15 +49,15 @@ def solve_omega(y_target, n, t0=12.0, omega0=1.0, max_expand=60, n_iter=50):
     return 0.5 * (lo + hi), ok
 
 
-def omega_per_galaxy(logM, jbar, n, k, t0=12.0):
-    """Per-galaxy omega from observed (logM, j_bar) under the IO model (n, k).
+def omega_per_galaxy(logM, jbar, n, k, t0=T0):
+    """Per-galaxy omega from observed (logM, j_bar) under the accretion model (n, k).
 
     Galaxies whose j_bar is unreachable are pinned to the omega caps: y > 1 -> -10
     (would need omega -> -inf), y < 0 -> +10 (omega -> +inf). Returns (omega, ok, y).
     """
     Mbar = 10.0 ** np.asarray(logM, float)
-    j_max = j_maxer(Mbar)
-    j_min = j_max / 10.0
+    j_max = j_maxer(Mbar)                     # = j_MP (asymptotic MP+21 value)
+    j_min = k * j_max / 10.0                  # floor = (k*j_MP)/10, scales with k
     y = (np.asarray(jbar, float) - j_min) / (k * j_max - j_min)
     omega, ok = solve_omega(y, n, t0)
     unsolved = ~ok

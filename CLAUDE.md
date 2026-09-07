@@ -5,11 +5,17 @@ Guidance for working in this repository.
 ## Project
 
 Semi-analytical galaxy evolution models for the baryonic specific-angular-momentum –
-mass – gas-fraction (j_bar – M_bar – f_gas) relation. Two accretion scenarios:
+mass – gas-fraction (j_bar – M_bar – f_gas) relation. The paper weighs two ingredients that
+regulate the j_bar–f_gas relation at fixed M_bar. **Both models are inside-out** (gas accretes
+at growing radii, j_acc(t) grows with n=1); they differ only in what scatters at fixed M_bar:
 
-- **Inside-out (io):** gas accretes at growing radii over time (galaxies grow in size).
-- **Non-inside-out (nio):** gas accretes at constant radius; galaxies are born at
-  different fixed sizes. Its accretion rate carries a mass-dependent timescale.
+- **Accretion bias (`accretion`, formerly io):** j_acc(t) shape fixed (n, k); the scatter is the
+  accretion rate omega (t_acc = 1/omega), inverted per galaxy from its observed j_bar.
+- **Spin bias (`spin`, formerly nio):** omega = a·(M_bar/1e10)^b fixed by mass; the scatter is the
+  spin parameter k (0.2–2, the cap on j_acc), inverted per galaxy from its observed j_bar.
+
+The shared inside-out engine lives in `models/common.py`; `accretion.py`/`spin.py` add only their
+scatter parameterization. `spin.py` also keeps a legacy constant-radius engine for the parked fit.
 
 The code is being migrated from the notebooks in `notebooks/` into the `jmfgas`
 package (`src/jmfgas/`) plus thin scripts in `scripts/`. **The notebooks are the
@@ -23,7 +29,7 @@ src/jmfgas/
   config.py    load_config (config/model.yaml), load_rv_relation (data json)
   io.py        save/load npz, path helpers
   physics/     btfr, radius (R_v), angmom (j_max, j_acc), sfl
-  models/      common, inside_out, non_inside_out, profiles  (JAX engine)
+  models/      common (shared inside-out engine), accretion, spin, profiles  (JAX engine)
   data/        sample build + corrections
   inference/   likelihoods, mcmc, grid
   viz/         cornerplot, chains, planes

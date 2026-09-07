@@ -14,8 +14,8 @@ import jmfgas
 from jmfgas.data import build_mcmc_observables
 from jmfgas.models.common import log_M_bar_array_jax
 from jmfgas.physics.angmom import j_maxer
-import jmfgas.models.inside_out as io
-import jmfgas.models.non_inside_out as nio
+import jmfgas.models as io
+import jmfgas.models as nio
 import jmfgas.inference.likelihoods as L
 
 NB_IO = jmfgas.ROOT / "notebooks" / "model_inside_out.ipynb"

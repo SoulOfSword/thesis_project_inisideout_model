@@ -15,8 +15,8 @@ from jmfgas.physics.sfl import SFL_jax
 from jmfgas.physics.kinematics import exp_vrot_jax
 from jmfgas.models import common as C
 import jmfgas.models.profiles as prof
-import jmfgas.models.non_inside_out as nio
-import jmfgas.models.inside_out as io
+import jmfgas.models as nio
+import jmfgas.models as io
 
 NB_IO = jmfgas.ROOT / "notebooks" / "model_inside_out.ipynb"
 NB_NIO = jmfgas.ROOT / "notebooks" / "model_non_inside_out.ipynb"

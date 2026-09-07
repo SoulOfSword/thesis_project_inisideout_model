@@ -20,13 +20,13 @@ sys.path.insert(0, str(ROOT / "src"))
 from jmfgas.config import load_config
 from jmfgas.inference import build_log_prob, adaptive_grid
 
-LABELS = {"io": ["n", "k"], "nio": ["a", "b"]}
+LABELS = {"accretion": ["n", "k"], "spin": ["a", "b"]}
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--model", choices=["io", "nio"], required=True)
+    p.add_argument("--model", choices=["accretion", "spin"], required=True)
     p.add_argument("--likelihood", choices=["4obs", "fgas"], required=True)
     p.add_argument("--sample", choices=["mcmc-obs", "full-hix", "converged", "MP_full", "full"],
                    default="mcmc-obs")

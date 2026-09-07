@@ -12,9 +12,8 @@ import jax.numpy as jnp
 from ..physics.sfl import SFL_jax
 from ..physics.kinematics import exp_vrot_jax
 from ..physics.radius import r_btfr_def
-from .common import M_times1_jax, C_def_jax, simpson_uniform_jax
-from .inside_out import Sigma_definer_jax
-from .non_inside_out import Sigma_definer_static_racc_jax, omega_Mdep
+from .common import M_times1_jax, C_def_jax, simpson_uniform_jax, Sigma_definer_jax
+from .spin import Sigma_definer_static_racc_jax, omega_Mdep
 
 
 def _reduce_profiles(SD_gas, SD_sfr, r_pc, M_bar):

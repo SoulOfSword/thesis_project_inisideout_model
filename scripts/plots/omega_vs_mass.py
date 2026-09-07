@@ -1,12 +1,14 @@
 """omega_acc vs M_bar diagnostics.
 
---model io  : per-galaxy omega from inverting j_bar at the IO (n, k), binned per mass.
---model nio : per-mass-bin best-fit omega from the NIO 4obs scan (engine; run on a node).
---model both: binned IO omega (inverted j_bar, full sample) + the NIO power-law line,
-              for hand-picked (--io-params n k) and (--nio-params a b). Light.
+--model accretion : per-galaxy omega from inverting j_bar at the accretion-bias (n, k), binned per mass.
+--model spin      : per-mass-bin best-fit omega from the legacy 4obs scan (engine; run on a node).
+--model both      : binned accretion omega (inverted j_bar, full sample) + the spin power-law line,
+                    for hand-picked (--accretion-params n k) and (--spin-params a b). Light.
 
-The io/nio modes overlay the NIO law omega = a(logM - 10) + b for the grid and/or MCMC (a, b).
-The io run also prints the omega spread, which sets the accretion-rate grid for the planes.
+The accretion/spin single modes overlay the spin law omega = a(logM-10)+b for the grid and/or MCMC.
+The accretion run also prints the omega spread, which sets the accretion-rate grid for the planes.
+Physics is unchanged from the former io/nio omega diagnostics: the accretion model's omega is still
+inverted from j_bar; the spin model's omega is still the mass power law.
 """
 
 import argparse
@@ -26,8 +28,8 @@ from jmfgas.inference.build import obs_table
 from jmfgas.inference.omega import omega_per_galaxy
 
 _MASS_BINS = np.arange(8, 12.5, 0.5)            # covers the full sample (up to logM ~ 11.8)
-_NIO_COLS = ("logMbar", "jbar", "Mgas", "e_Mgas", "Mstar", "e_Mstar",
-             "jgas", "e_jgas", "jstar", "e_jstar")
+_SPIN_COLS = ("logMbar", "jbar", "Mgas", "e_Mgas", "Mstar", "e_Mstar",
+              "jgas", "e_jgas", "jstar", "e_jstar")
 
 
 def _init_worker():
@@ -36,69 +38,36 @@ def _init_worker():
 
 
 def _scan_bin(task):
-    """logL vs omega for one mass bin (NIO, a=0, b=omega)."""
+    """logL vs omega for one mass bin (legacy 4obs, a=0, b=omega)."""
     obs_bin, omega_grid, sfl = task
     from jmfgas.inference.likelihoods import logL_4obs_all_galaxies
     return np.array([logL_4obs_all_galaxies(0.0, float(om), *obs_bin, sfl) for om in omega_grid])
 
 
-def _nio_lines(args):
-    """[(label, a, b, linestyle)] for omega = a(logM-10)+b from the grid and/or MCMC."""
+def _spin_lines(args):
+    """[(label, a, b, linestyle)] for omega = a(logM-10)+b from the grid and/or MCMC (legacy)."""
     out = []
-    if args.nio_source in ("grid", "both") and args.nio_grid.exists():
-        a, b = np.load(args.nio_grid, allow_pickle=True)["peak"]
+    if args.spin_source in ("grid", "both") and args.spin_grid.exists():
+        a, b = np.load(args.spin_grid, allow_pickle=True)["peak"]
         out.append(("grid", float(a), float(b), "-"))
-    if args.nio_source in ("mcmc", "both") and args.nio_chain.exists():
+    if args.spin_source in ("mcmc", "both") and args.spin_chain.exists():
         import emcee
-        ch = emcee.backends.HDFBackend(str(args.nio_chain), read_only=True).get_chain(
+        ch = emcee.backends.HDFBackend(str(args.spin_chain), read_only=True).get_chain(
             discard=args.burn_in, flat=True)
         a, b = np.median(ch, axis=0)
         out.append(("MCMC", float(a), float(b), "--"))
     return out
 
 
-def _draw_nio(ax, lines):
+def _draw_spin(ax, lines):
     x = np.linspace(_MASS_BINS[0], _MASS_BINS[-1], 50)
     for label, a, b, ls in lines:
         ax.plot(x, a * (x - 10.0) + b, color="r", ls=ls, lw=2,
-                label=rf"NIO {label}: $\omega={a:.2f}(\log M-10)+{b:.2f}$")
+                label=rf"variable torques {label}: $\omega={a:.2f}(\log M-10)+{b:.2f}$")
 
 
-def io_diagnostic(args, data_dir, lines):
-    n, k = args.io_params or (float(v) for v in np.load(args.io_grid, allow_pickle=True)["peak"])
-    n, k = float(n), float(k)
-    t = obs_table(args.sample, data_dir)
-    logM = t["logMbar"]
-    omega_raw, _, _ = omega_per_galaxy(logM, t["jbar"], n, k)
-    omega = np.clip(omega_raw, None, 10.0)                      # the model's omega ceiling
-    cen = 0.5 * (_MASS_BINS[:-1] + _MASS_BINS[1:])
-    med = np.full(len(cen), np.nan); lo = med.copy(); hi = med.copy()
-    for i in range(len(cen)):
-        v = omega[(logM >= _MASS_BINS[i]) & (logM < _MASS_BINS[i + 1])]
-        if len(v):
-            med[i], lo[i], hi[i] = np.percentile(v, [50, 16, 84])
-    fig, ax = plt.subplots(figsize=(7, 5), dpi=200, facecolor="w")
-    ax.errorbar(cen, med, xerr=0.25, yerr=[med - lo, hi - med], fmt="-o", color="b",
-                capsize=2, alpha=0.8, label=rf"IO binned ($n={n:.2f}$, $k={k:.2f}$)")
-    _draw_nio(ax, lines)
-    print(f"IO (n={n:.3f}, k={k:.3f}): omega over {len(logM)} galaxies "
-          f"[{omega_raw.min():.2f}, {omega_raw.max():.2f}]  (1/99 pct "
-          f"[{np.percentile(omega_raw, 1):.2f}, {np.percentile(omega_raw, 99):.2f}])")
-    return fig
-
-
-def nio_diagnostic(args, data_dir, lines):
-    cen, best, lo, hi = _nio_scan(args, data_dir)
-    v = np.isfinite(best)
-    fig, ax = plt.subplots(figsize=(7, 5), dpi=200, facecolor="w")
-    ax.errorbar(cen[v], best[v], xerr=0.25, yerr=[best[v] - lo[v], hi[v] - best[v]],
-                fmt="o", color="steelblue", capsize=3, alpha=0.85, label="NIO per-bin fit")
-    _draw_nio(ax, lines)
-    return fig
-
-
-def _io_binned(logM, jbar, n, k):
-    """Per-galaxy IO omega (inverted j_bar, clipped to +-10) -> (cen, median, 16, 84) per bin."""
+def _accretion_binned(logM, jbar, n, k):
+    """Per-galaxy accretion omega (inverted j_bar, clipped to +-10) -> (cen, median, 16, 84)/bin."""
     omega = np.clip(omega_per_galaxy(logM, jbar, n, k)[0], -10.0, 10.0)
     cen = 0.5 * (_MASS_BINS[:-1] + _MASS_BINS[1:])
     med = np.full(len(cen), np.nan); lo = med.copy(); hi = med.copy()
@@ -109,8 +78,36 @@ def _io_binned(logM, jbar, n, k):
     return cen, med, lo, hi
 
 
-def _nio_scan(args, data_dir):
-    """NIO per-mass-bin best-fit omega (a=0) from the 4obs scan -> (cen, best, lo, hi).
+def accretion_diagnostic(args, data_dir, lines):
+    n, k = args.accretion_params or (float(v) for v in np.load(args.accretion_grid,
+                                                               allow_pickle=True)["peak"])
+    n, k = float(n), float(k)
+    t = obs_table(args.sample, data_dir)
+    logM = np.asarray(t["logMbar"])
+    omega_raw, _, _ = omega_per_galaxy(logM, t["jbar"], n, k)
+    cen, med, lo, hi = _accretion_binned(logM, np.asarray(t["jbar"]), n, k)
+    fig, ax = plt.subplots(figsize=(7, 5), dpi=200, facecolor="w")
+    ax.errorbar(cen, med, xerr=0.25, yerr=[med - lo, hi - med], fmt="-o", color="b",
+                capsize=2, alpha=0.8, label=rf"variable accretion ($n={n:.2f}$, $k={k:.2f}$)")
+    _draw_spin(ax, lines)
+    print(f"accretion (n={n:.3f}, k={k:.3f}): omega over {len(logM)} galaxies "
+          f"[{omega_raw.min():.2f}, {omega_raw.max():.2f}]  (1/99 pct "
+          f"[{np.percentile(omega_raw, 1):.2f}, {np.percentile(omega_raw, 99):.2f}])")
+    return fig
+
+
+def spin_diagnostic(args, data_dir, lines):
+    cen, best, lo, hi = _spin_scan(args, data_dir)
+    v = np.isfinite(best)
+    fig, ax = plt.subplots(figsize=(7, 5), dpi=200, facecolor="w")
+    ax.errorbar(cen[v], best[v], xerr=0.25, yerr=[best[v] - lo[v], hi[v] - best[v]],
+                fmt="o", color="steelblue", capsize=3, alpha=0.85, label="variable torques per-bin fit")
+    _draw_spin(ax, lines)
+    return fig
+
+
+def _spin_scan(args, data_dir):
+    """Legacy per-mass-bin best-fit omega (a=0) from the 4obs scan -> (cen, best, lo, hi).
     Heavy: loky workers + the engine, so run on a node."""
     from loky import get_reusable_executor
     t = obs_table(args.sample, data_dir)
@@ -118,7 +115,7 @@ def _nio_scan(args, data_dir):
     omega_grid = np.linspace(args.omega_min, args.omega_max, args.scan_n)
     n_bins = len(_MASS_BINS) - 1
     masks = [(logM >= _MASS_BINS[i]) & (logM < _MASS_BINS[i + 1]) for i in range(n_bins)]
-    tasks = [(tuple(np.asarray(t[c])[m] for c in _NIO_COLS), omega_grid, "cutoff_ksl")
+    tasks = [(tuple(np.asarray(t[c])[m] for c in _SPIN_COLS), omega_grid, "cutoff_ksl")
              for m in masks]
     ex = get_reusable_executor(max_workers=min(n_bins, args.max_workers), initializer=_init_worker)
     rows = list(ex.map(_scan_bin, tasks))
@@ -143,40 +140,42 @@ def _nio_scan(args, data_dir):
 
 
 def both_diagnostic(args, data_dir):
-    """Binned IO omega (inverted j_bar, full sample) + the NIO analytical power-law line."""
+    """Binned accretion omega (inverted j_bar, full sample) + the spin analytical power-law line."""
     import jax.numpy as jnp
-    from jmfgas.models.non_inside_out import omega_Mdep
-    if args.io_params is None or args.nio_params is None:
-        raise SystemExit("--model both needs --io-params n k and --nio-params a b")
-    n, k = (float(v) for v in args.io_params)
-    a, b = (float(v) for v in args.nio_params)
+    from jmfgas.models import omega_Mdep
+    if args.accretion_params is None or args.spin_params is None:
+        raise SystemExit("--model both needs --accretion-params n k and --spin-params a b")
+    n, k = (float(v) for v in args.accretion_params)
+    a, b = (float(v) for v in args.spin_params)
     t = obs_table(args.sample, data_dir)
-    io_cen, io_med, io_lo, io_hi = _io_binned(np.asarray(t["logMbar"]), np.asarray(t["jbar"]), n, k)
+    cen, med, lo, hi = _accretion_binned(np.asarray(t["logMbar"]), np.asarray(t["jbar"]), n, k)
 
     fig, ax = plt.subplots(figsize=(4, 4), dpi=300, facecolor="w")
-    vi = np.isfinite(io_med)
-    ax.errorbar(io_cen[vi], io_med[vi], xerr=0.25,
-                yerr=[io_med[vi] - io_lo[vi], io_hi[vi] - io_med[vi]], fmt="o",
-                capsize=2, alpha=0.85, color="royalblue", label=rf"IO binned ($n={n:.2f}$, $k={k:.2f}$)")
+    vi = np.isfinite(med)
+    ax.errorbar(cen[vi], med[vi], xerr=0.25, yerr=[med[vi] - lo[vi], hi[vi] - med[vi]], fmt="o",
+                capsize=2, alpha=0.85, color="royalblue",
+                label=rf"variable accretion ($n={n:.2f}$, $k={k:.2f}$)")
     xl = np.linspace(_MASS_BINS[0], _MASS_BINS[-1], 100)
     ax.plot(xl, np.asarray(omega_Mdep(jnp.asarray(xl), a, b)), color="r", lw=2.5, zorder=5,
-            label=rf"NIO law: $\omega={a:g}\,(M_{{\rm bar}}/10^{{10}})^{{{b:g}}}$")
+            label=rf"variable torques: $\omega_{{\rm acc}}={a:g}\,(M_{{\rm bar}}/10^{{10}})^{{{b:g}}}$")
     return fig
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--model", choices=["io", "nio", "both"], required=True)
+    p.add_argument("--model", choices=["accretion", "spin", "both"], required=True)
     p.add_argument("--sample", default="mcmc-obs")
-    p.add_argument("--io-grid", type=Path, default=ROOT / "outputs/grids/grid_io_4obs_grid-obs.npz")
-    p.add_argument("--io-params", type=float, nargs=2, default=None, metavar=("n", "k"))
-    p.add_argument("--nio-params", type=float, nargs=2, default=None, metavar=("a", "b"),
-                   help="NIO power-law omega = a*(Mbar/1e10)**b, for --model both")
-    p.add_argument("--nio-grid", type=Path, default=ROOT / "outputs/grids/grid_nio_4obs_grid-obs.npz")
-    p.add_argument("--nio-chain", type=Path,
+    p.add_argument("--accretion-grid", type=Path,
+                   default=ROOT / "outputs/grids/grid_io_4obs_grid-obs.npz")
+    p.add_argument("--accretion-params", type=float, nargs=2, default=None, metavar=("n", "k"))
+    p.add_argument("--spin-params", type=float, nargs=2, default=None, metavar=("a", "b"),
+                   help="spin power-law omega = a*(Mbar/1e10)**b, for --model both")
+    p.add_argument("--spin-grid", type=Path,
+                   default=ROOT / "outputs/grids/grid_nio_4obs_grid-obs.npz")
+    p.add_argument("--spin-chain", type=Path,
                    default=ROOT / "outputs/mcmc_chains/chain_nio_4obs_mcmc-obs_20260606.h5")
-    p.add_argument("--nio-source", choices=["grid", "mcmc", "both"], default="both")
+    p.add_argument("--spin-source", choices=["grid", "mcmc", "both"], default="both")
     p.add_argument("--burn-in", type=int, default=50)
     p.add_argument("--omega-min", type=float, default=-5.0)
     p.add_argument("--omega-max", type=float, default=15.0)
@@ -191,9 +190,9 @@ def main():
     if args.model == "both":
         fig = both_diagnostic(args, data_dir)
     else:
-        lines = _nio_lines(args)
-        fig = io_diagnostic(args, data_dir, lines) if args.model == "io" \
-            else nio_diagnostic(args, data_dir, lines)
+        lines = _spin_lines(args)
+        fig = accretion_diagnostic(args, data_dir, lines) if args.model == "accretion" \
+            else spin_diagnostic(args, data_dir, lines)
 
     ax = fig.axes[0]
     ax.axhline(0, color="gray", ls="--", alpha=0.5)

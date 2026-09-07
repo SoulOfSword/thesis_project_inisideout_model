@@ -87,7 +87,7 @@ def main():
 
     import jax.numpy as jnp
     from jmfgas.models.profiles import radial_profiles_io
-    from jmfgas.models.inside_out import build_r_acc_matrix_for_all_M_jax
+    from jmfgas.models import build_r_acc_matrix_for_all_M_jax
     from jmfgas.models.common import log_M_bar_array_jax
     r_acc = build_r_acc_matrix_for_all_M_jax(jnp.float64(n), jnp.float64(k))
 

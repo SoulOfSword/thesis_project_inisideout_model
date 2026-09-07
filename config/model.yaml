@@ -2,7 +2,7 @@
 # Run-specific things (parameter values, sample choice, grid extents) go on the CLI.
 
 time:
-  t0: 12.0          # present-day time [Gyr]
+  t0: 13.0          # present-day time [Gyr]
   dt: 0.1           # integration step [Gyr]
 
 mass_grid:
@@ -20,6 +20,11 @@ j_max:
   slope: 0.73
   log10_norm: -4.25
 
+# halo spin scatter: j_min is scaled by lambda/lambda_median = exp(sigma_ln * offset).
+lambda_scatter:
+  sigma_ln: 0.57
+  offsets: [-1.0, -0.5, 0.0, 0.5, 1.0]
+
 sfl:
   default: cutoff_ksl
   Rf: 0.45 # return fraction - 0.3 for old_ksl and 0.45 for the modern KSL
@@ -31,18 +36,18 @@ integration:
   n_j: 10           # j_acc grid points per mass
 
 mcmc:
-  io:
+  accretion:                 # accretion-bias (former io): fixed (n, k), scatter in omega
     param_names: [n, k]
     bounds:
       n: [0.1, 2.5]
       k: [1.0, 3.0]
-    init: [0.5, 2.]
-  nio:
+    init: [1.0, 2.0]
+  spin:                      # spin-bias (former nio): omega=a*(Mbar/1e10)^b, scatter in k
     param_names: [a, b]
     bounds:
       a: [-1.5, 7.0]
       b: [-1.5, 5.0]
-    init: [1.5, 1.5]
+    init: [0.1, 0.5]
 
 # adaptive coarse-to-fine logL grid (run_grid.py)
 grid:

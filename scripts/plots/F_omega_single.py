@@ -1,18 +1,3 @@
-"""Compare the two F(omega) implementations and visualise the inversion degeneracy.
-
-F(omega) = int_0^1 x^n e^{-omega t0 x} dx / int_0^1 e^{-omega t0 x} dx is the monotone map
-inverted to assign each galaxy its accretion rate from y = (j_bar - j_min)/(k j_max - j_min).
-This draws a 2x2 mosaic over omega in [-10, 10]:
-
-  top row    : the current model F (fixed 256-pt Simpson quadrature)
-  bottom row : the analytic A/B Taylor-series F (machine-precise for both signs)
-  left column : F(omega) = y          right column : dF/domega
-
-Observed galaxies are placed at (omega*, y*) on each F curve. The vertical bar is the
-j_bar uncertainty mapped into y; the horizontal bar is the omega interval it implies
-(via F^-1) -- long where F is flat (the degenerate regimes), short where F is steep.
-"""
-
 import argparse
 import sys
 from functools import partial
@@ -32,10 +17,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from jmfgas.config import load_config
 from jmfgas.data import sample_frame
 from jmfgas.physics.angmom import j_maxer
-from jmfgas.models import F_omega_jax as F_current
 
 
-# ---- candidate analytic implementation (A(z)=int_0^1 x^n e^{-zx}dx, B(z)=int_0^1 e^{-zx}dx) ----
+# ---- analytic implementation (A(z)=int_0^1 x^n e^{-zx}dx, B(z)=int_0^1 e^{-zx}dx) ----
 @partial(jax.jit, static_argnames=("K",))
 def A_integral(z, n, K=256):
     z = jnp.asarray(z, dtype=jnp.float64)
@@ -120,44 +104,28 @@ def main():
     ys, dys = y[sel], dy[sel]
 
     w = np.linspace(-10.0, 10.0, 600)
-    F_cur = np.asarray(F_current(jnp.asarray(w), n, t0))
     F_ana = np.asarray(F_analytic(jnp.asarray(w), n, t0))
 
     def invert(Fc, yq):                                    # F decreasing -> interp on the reverse
         return np.interp(yq, Fc[::-1], w[::-1])
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10), dpi=150, facecolor="w")
-    rows = [(F_cur, "current (Simpson, N=256)"), (F_ana, "analytic A/B Taylor")]
-    for r, (Fc, name) in enumerate(rows):
-        dFc = np.gradient(Fc, w)
-        ws = invert(Fc, ys)
-        w_hi = invert(Fc, ys - dys)                        # lower y -> higher omega
-        w_lo = invert(Fc, ys + dys)
-        axF, axD = axes[r][0], axes[r][1]
-        axF.plot(w, Fc, color="navy", lw=2.5, zorder=1)
-        axF.errorbar(ws, ys, xerr=[ws - w_lo, w_hi - ws], yerr=dys, fmt="o", ms=5,
-                     color="crimson", ecolor="0.5", elinewidth=1.2, capsize=2, alpha=0.85, zorder=3)
-        axF.set_xlim(-10, 10)
-        axF.set_xlabel(r"$\omega_{\rm acc}$ [Gyr$^{-1}$]", fontsize=14)
-        axF.set_ylabel(r"$F(\omega)\;=\;y$", fontsize=14)
-        axF.set_title(f"$F(\\omega)$ ({name})", fontsize=13)
-        axF.grid(alpha=0.3); axF.tick_params(labelsize=12)
+    ws = invert(F_ana, ys)
+    w_hi = invert(F_ana, ys - dys)                         # lower y -> higher omega
+    w_lo = invert(F_ana, ys + dys)
 
-        axD.plot(w, np.abs(dFc), color="navy", lw=2.5, zorder=1)
-        axD.scatter(ws, np.abs(np.interp(ws, w, dFc)), color="crimson", s=25, zorder=3)
-        axD.axhline(0, color="k", lw=0.8, ls="--")
-        axD.set_xlim(-10, 10)
-        axD.set_yscale("log")
-        axD.set_xlabel(r"$\omega_{\rm acc}$ [Gyr$^{-1}$]", fontsize=14)
-        axD.set_ylabel(r"$\vert dF/d\omega \vert$", fontsize=14)
-        axD.set_title(f"$dF/d\\omega$ ({name})", fontsize=13)
-        axD.grid(alpha=0.3); axD.tick_params(labelsize=12)
+    fig, ax = plt.subplots(figsize=(7, 5), dpi=150, facecolor="w")
+    ax.plot(w, F_ana, color="navy", lw=2.5, zorder=1)
+    ax.errorbar(ws, ys, xerr=[ws - w_lo, w_hi - ws], yerr=dys, fmt="o", ms=5,
+                color="crimson", ecolor="0.5", elinewidth=1.2, capsize=2, alpha=0.85, zorder=3)
+    ax.set_xlim(-10, 10)
+    ax.set_xlabel(r"$\omega_{\rm acc}$ [Gyr$^{-1}$]", fontsize=14)
+    ax.set_ylabel(r"$F(\omega)\;=\;y$", fontsize=14)
+    # ax.set_title(rf"$n={n:.3f}$, $k={k:.3f}$", fontsize=14)
+    # ax.grid(alpha=0.3)
+    ax.tick_params(labelsize=12)
 
-    fig.suptitle(rf"$n={n:.3f}$, $k={k:.3f}$",# — {len(sel)} galaxies "
-                 #r"(vertical bar: $\delta j$ in $y$; horizontal: implied $\delta\omega$)",
-                 fontsize=14)
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
-    out = args.out or (ROOT / cfg["paths"]["figures"] / f"F_omega_compare_{n:.1f}_{k:.1f}.pdf")
+    fig.tight_layout()
+    out = args.out or (ROOT / cfg["paths"]["figures"] / f"F_omega_single_{n:.1f}_{k:.1f}.pdf")
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, bbox_inches="tight")
     print(f"wrote {out}")

@@ -13,18 +13,18 @@ _CMAP = cm.jet_r
 # model- AND plane-specific, matched to the reference notebooks. The line colour is
 # jet_r(level), so this set drives both which curves appear and what colour they get.
 FGAS_LEVELS = {
-    "io": {
+    "accretion": {
         "jbar":    (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
         "stellar": (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
         "gaseous": (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
     },
-    "nio": {
+    "spin": {
         "jbar":    (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
         "stellar": (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
         "gaseous": (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
     },
 }
-_DEFAULT_LEVELS = FGAS_LEVELS["io"]["jbar"]
+_DEFAULT_LEVELS = FGAS_LEVELS["accretion"]["jbar"]
 
 # compilation samples: marker + the column names that hold their (logM, logj) per plane
 _COMPILATION_MARKERS = {"Dwarfs": "p", "superthin": "s", "HIX": "X", "superspirals": "D",
@@ -89,7 +89,7 @@ def _legend(ax, model_lines, gal_names):
 
 def _draw_plane(ax, logM, logx, logy, fgas, obs_x, obs_y, obs_fgas,
                 obs_x_err, obs_y_err, compilation, xcol, ycol,
-                xlabel, ylabel, title, levels=_DEFAULT_LEVELS, ylim_bottom=None):
+                xlabel, ylabel, levels=_DEFAULT_LEVELS, ylim_bottom=None):
     """Shared body: model tracks coloured by f_gas, observed sample, compilation."""
     model_lines = []
     for lvl, xs, ys in _fgas_tracks(logx, logy, fgas, levels):
@@ -115,7 +115,6 @@ def _draw_plane(ax, logM, logx, logy, fgas, obs_x, obs_y, obs_fgas,
         drawn.append(name)
 
     _legend(ax, model_lines, drawn)
-    ax.set_title(title, fontsize=18)
     ax.set_xlabel(xlabel, fontsize=15)
     ax.set_ylabel(ylabel, fontsize=15)
     ax.tick_params(labelsize=14)
@@ -139,8 +138,7 @@ def _colorbar(ax):
     cbar.ax.tick_params(labelsize=14)
 
 
-def plane_jM_fgas(ax, logM, j_bar, f_gas, obs, compilation, params_label="",
-                  levels=_DEFAULT_LEVELS):
+def plane_jM_fgas(ax, logM, j_bar, f_gas, obs, compilation, levels=_DEFAULT_LEVELS):
     """j_bar - M_bar - f_gas plane: model tracks coloured by f_gas + observed + compilation.
 
     logM (n_mass,), j_bar/f_gas (n_mass, n_jacc) are the present-day per-mass model grids.
@@ -149,49 +147,41 @@ def plane_jM_fgas(ax, logM, j_bar, f_gas, obs, compilation, params_label="",
     """
     logj = np.log10(np.where(np.asarray(j_bar) > 0, j_bar, np.nan))
     logMmat = np.broadcast_to(np.asarray(logM)[:, None], logj.shape)
-    title = (r"$\log(j_{\rm bar})$ vs $\log(M_{\rm bar})$ vs $f_{\rm gas}$"
-             + ("\n" + params_label if params_label else ""))
     sc = _draw_plane(
         ax, logM, logMmat, logj, np.asarray(f_gas),
         obs["log_Mbar"], obs["log_jbar"], obs["fgas"],
         obs["log_Mbar_err"], obs["log_jbar_err"], compilation, "logMbar", "logjbar",
         r"$\log(M_{\rm bar} \, / \, \rm M_{\odot})$",
-        r"$\log(j_{\rm bar} \, / \, \rm kpc \, km \, s^{-1})$", title,
+        r"$\log(j_{\rm bar} \, / \, \rm kpc \, km \, s^{-1})$",
         levels=levels, ylim_bottom=0.5)
     _colorbar(ax)
     return sc
 
 
-def plane_stellar(ax, M_star, j_star, f_gas, obs, compilation, params_label="",
-                  levels=_DEFAULT_LEVELS):
+def plane_stellar(ax, M_star, j_star, f_gas, obs, compilation, levels=_DEFAULT_LEVELS):
     """j_star - M_star - f_gas plane (model tracks coloured by f_gas + observed + compilation)."""
     logMmat = np.log10(np.where(np.asarray(M_star) > 0, M_star, np.nan))
     logj = np.log10(np.where(np.asarray(j_star) > 0, j_star, np.nan))
-    title = (r"$\log(j_{\star})$ vs $\log(M_{\star})$ vs $f_{\rm gas}$"
-             + ("\n" + params_label if params_label else ""))
     sc = _draw_plane(
         ax, None, logMmat, logj, np.asarray(f_gas),
         obs["log_Mstar"], obs["log_jstar"], obs["fgas"],
         obs["log_Mstar_err"], obs["log_jstar_err"], compilation, "logMstar", "logjstar",
         r"$\log(M_{\star} \, / \, \rm M_{\odot})$",
-        r"$\log(j_{\star} \, / \, \rm kpc \, km \, s^{-1})$", title, levels=levels)
+        r"$\log(j_{\star} \, / \, \rm kpc \, km \, s^{-1})$", levels=levels)
     _colorbar(ax)
     return sc
 
 
-def plane_gaseous(ax, M_gas, j_gas, f_gas, obs, compilation, params_label="",
-                  levels=_DEFAULT_LEVELS):
+def plane_gaseous(ax, M_gas, j_gas, f_gas, obs, compilation, levels=_DEFAULT_LEVELS):
     """j_gas - M_gas - f_gas plane (model tracks coloured by f_gas + observed + compilation)."""
     logMmat = np.log10(np.where(np.asarray(M_gas) > 0, M_gas, np.nan))
     logj = np.log10(np.where(np.asarray(j_gas) > 0, j_gas, np.nan))
-    title = (r"$\log(j_{\rm gas})$ vs $\log(M_{\rm gas})$ vs $f_{\rm gas}$"
-             + ("\n" + params_label if params_label else ""))
     sc = _draw_plane(
         ax, None, logMmat, logj, np.asarray(f_gas),
         obs["log_Mgas"], obs["log_jgas"], obs["fgas"],
         obs["log_Mgas_err"], obs["log_jgas_err"], compilation, "logMgas", "logjgas",
         r"$\log(M_{\rm gas} \, / \, \rm M_{\odot})$",
-        r"$\log(j_{\rm gas} \, / \, \rm kpc \, km \, s^{-1})$", title, levels=levels)
+        r"$\log(j_{\rm gas} \, / \, \rm kpc \, km \, s^{-1})$", levels=levels)
     _colorbar(ax)
     return sc
 

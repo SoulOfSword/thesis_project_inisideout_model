@@ -24,7 +24,7 @@ from jmfgas.inference.build import build_log_prob
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--model", choices=["io", "nio"], required=True)
+    p.add_argument("--model", choices=["accretion", "spin"], required=True)
     p.add_argument("--likelihood", choices=["4obs", "fgas", "a0"], required=True)
     p.add_argument("--sample", choices=["mcmc-obs", "converged", "MP_full", "full-hix", "full"],
                    default="mcmc-obs")
